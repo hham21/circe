@@ -65,8 +65,8 @@ describe("integration: nested orchestrators", () => {
     const parallel = new Parallel(frontend, backend);
     const result = await parallel.run("spec");
     expect(result).toEqual({
-      frontend: { component: "Header" },
-      backend: { endpoint: "/api/users" },
+      frontend: { status: "fulfilled", value: { component: "Header" } },
+      backend: { status: "fulfilled", value: { endpoint: "/api/users" } },
     });
   });
 

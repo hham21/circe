@@ -1,27 +1,25 @@
 import type { Runnable } from "../types.js";
 import { getFormatter } from "../context.js";
+import type { EventBus, RetryPolicy } from "../events.js";
+import { executeWithRetry } from "../events.js";
+import { parseTrailingOptions } from "../utils.js";
 
-interface LoopOptions {
+export interface LoopOptions {
   maxRounds?: number;
   stopWhen?: (result: unknown) => boolean;
+  retryPolicy?: RetryPolicy;
+  eventBus?: EventBus;
 }
 
 export class Loop implements Runnable {
   private agents: Runnable[];
   private maxRounds: number;
   private stopWhen: ((result: unknown) => boolean) | null;
+  private retryPolicy: RetryPolicy | null;
+  private eventBus: EventBus | null;
 
   constructor(...args: [...Runnable[], LoopOptions] | Runnable[]) {
-    const last = args[args.length - 1];
-    let options: LoopOptions = {};
-    let agents: Runnable[];
-
-    if (last && typeof last === "object" && !("run" in last)) {
-      options = last as LoopOptions;
-      agents = args.slice(0, -1) as Runnable[];
-    } else {
-      agents = args as Runnable[];
-    }
+    const { agents, options } = parseTrailingOptions<LoopOptions>(args);
 
     if (agents.length < 2) {
       throw new Error("Loop requires at least two agents");
@@ -30,6 +28,8 @@ export class Loop implements Runnable {
     this.agents = agents;
     this.maxRounds = options.maxRounds ?? 3;
     this.stopWhen = options.stopWhen ?? null;
+    this.retryPolicy = options.retryPolicy ?? null;
+    this.eventBus = options.eventBus ?? null;
   }
 
   async run(input: unknown): Promise<unknown> {
@@ -42,9 +42,51 @@ export class Loop implements Runnable {
         formatter.logInfo(`Loop round ${round + 1}/${this.maxRounds}`);
       }
 
-      roundResult = currentInput;
-      for (const agent of this.agents) {
-        roundResult = await agent.run(roundResult);
+      this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
+
+      try {
+        roundResult = currentInput;
+        let roundCost = 0;
+        for (const agent of this.agents) {
+          if (this.retryPolicy) {
+            const capturedInput = roundResult;
+            roundResult = await executeWithRetry(
+              () => agent.run(capturedInput),
+              this.retryPolicy,
+              (attempt) => {
+                const agentName = (agent as any).name ?? "unknown";
+                this.eventBus?.emit({
+                  type: "retry",
+                  agent: agentName,
+                  attempt,
+                  maxAttempts: this.retryPolicy!.maxRetries,
+                  timestamp: Date.now(),
+                });
+              },
+            );
+          } else {
+            roundResult = await agent.run(roundResult);
+          }
+
+          const metrics = (agent as any).lastMetrics;
+          if (metrics?.cost) roundCost += metrics.cost;
+        }
+
+        this.eventBus?.emit({
+          type: "round:done",
+          round,
+          result: roundResult,
+          cost: roundCost || undefined,
+          timestamp: Date.now(),
+        });
+      } catch (err: any) {
+        this.eventBus?.emit({
+          type: "round:error",
+          round,
+          error: err.message ?? String(err),
+          timestamp: Date.now(),
+        });
+        throw err;
       }
 
       if (formatter?.logRoundResult) {

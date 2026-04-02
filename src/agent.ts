@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ZodSchema } from "zod";
 import { getFormatter, getWorkDir, getSkillRegistry } from "./context.js";
 import type { Runnable } from "./types.js";
+import { findJsonString } from "./utils.js";
 
 export interface AgentConfig {
   name: string;
@@ -17,7 +18,7 @@ export interface AgentConfig {
   outputSchema?: ZodSchema;
 }
 
-interface ResultMetrics {
+export interface ResultMetrics {
   resultText: string;
   cost: number;
   inputTokens: number;
@@ -39,6 +40,11 @@ export class BaseAgent implements Runnable {
   inputSchema: ZodSchema | null;
   outputSchema: ZodSchema | null;
   private sessionId: string | null = null;
+  private _lastMetrics: ResultMetrics | null = null;
+
+  get lastMetrics(): ResultMetrics | null {
+    return this._lastMetrics;
+  }
 
   constructor(config: AgentConfig) {
     this.name = config.name;
@@ -106,13 +112,7 @@ export class BaseAgent implements Runnable {
   }
 
   extractJson(text: string): string | null {
-    const codeBlockMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
-    if (codeBlockMatch) return codeBlockMatch[1].trim();
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return jsonMatch[0];
-
-    return null;
+    return findJsonString(text);
   }
 
   parseResult(raw: string): unknown {
@@ -196,6 +196,7 @@ export class BaseAgent implements Runnable {
   }
 
   private finalize(metrics: ResultMetrics, formatter: any): unknown {
+    this._lastMetrics = metrics;
     const { resultText, cost, inputTokens, outputTokens } = metrics;
     const parsed = this.parseResult(resultText);
 
