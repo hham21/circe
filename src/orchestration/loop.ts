@@ -46,6 +46,7 @@ export class Loop implements Runnable {
 
       try {
         roundResult = currentInput;
+        let roundCost = 0;
         for (const agent of this.agents) {
           if (this.retryPolicy) {
             const capturedInput = roundResult;
@@ -66,13 +67,16 @@ export class Loop implements Runnable {
           } else {
             roundResult = await agent.run(roundResult);
           }
+
+          const metrics = (agent as any).lastMetrics;
+          if (metrics?.cost) roundCost += metrics.cost;
         }
 
         this.eventBus?.emit({
           type: "round:done",
           round,
           result: roundResult,
-          cost: this.eventBus?.getCostSummary().total,
+          cost: roundCost || undefined,
           timestamp: Date.now(),
         });
       } catch (err: any) {

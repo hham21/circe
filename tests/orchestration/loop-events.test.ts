@@ -35,6 +35,33 @@ describe("Loop with EventBus", () => {
     const errors = bus.history.filter((e) => e.type === "round:error");
     expect(errors).toHaveLength(1);
   });
+
+  it("tracks cost per round from agent lastMetrics", async () => {
+    const bus = new EventBus();
+    const gen = {
+      name: "gen",
+      lastMetrics: { cost: 1.5, inputTokens: 100, outputTokens: 50, resultText: "" },
+      async run() { return "built"; },
+    };
+    let evalCalls = 0;
+    const eval_ = {
+      name: "eval",
+      lastMetrics: { cost: 0.5, inputTokens: 50, outputTokens: 25, resultText: "" },
+      async run() { evalCalls++; return { passed: evalCalls >= 1 }; },
+    };
+
+    const loop = new Loop(gen, eval_, {
+      maxRounds: 2,
+      stopWhen: (r: any) => r.passed,
+      eventBus: bus,
+    });
+
+    await loop.run("spec");
+
+    const roundDone = bus.history.find((e) => e.type === "round:done") as any;
+    expect(roundDone).toBeDefined();
+    expect(roundDone.cost).toBe(2.0);
+  });
 });
 
 describe("Loop with RetryPolicy", () => {

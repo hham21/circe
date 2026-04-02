@@ -59,12 +59,16 @@ export class Contract implements Runnable {
         };
 
         const proposal = await runAgent(this.proposer, currentInput);
+        const proposerCost = (this.proposer as any).lastMetrics?.cost ?? 0;
         review = this.parseReview(await runAgent(this.reviewer, proposal));
+        const reviewerCost = (this.reviewer as any).lastMetrics?.cost ?? 0;
+        const roundCost = proposerCost + reviewerCost;
 
         this.eventBus?.emit({
           type: "round:done",
           round: i,
           result: review,
+          cost: roundCost || undefined,
           timestamp: Date.now(),
         });
       } catch (err: any) {
