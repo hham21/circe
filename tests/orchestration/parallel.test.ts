@@ -6,7 +6,10 @@ describe("Parallel", () => {
     const a = { name: "frontend", async run() { return "react-app"; } };
     const b = { name: "backend", async run() { return "fastapi-server"; } };
     const result = await new Parallel(a, b).run("spec");
-    expect(result).toEqual({ frontend: "react-app", backend: "fastapi-server" });
+    expect(result).toEqual({
+      frontend: { status: "fulfilled", value: "react-app" },
+      backend: { status: "fulfilled", value: "fastapi-server" },
+    });
   });
 
   it("actually runs concurrently", async () => {
