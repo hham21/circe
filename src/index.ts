@@ -1,4 +1,13 @@
-export { BaseAgent, agent, loadAgent } from "./agent.js";
+export { BaseAgent, agent, loadAgent, type ResultMetrics } from "./agent.js";
+export {
+  EventBus,
+  executeWithRetry,
+  defaultShouldRetry,
+  defaultBackoff,
+  type OrchestratorEvent,
+  type RetryPolicy,
+} from "./events.js";
+export { findJsonString, parseTrailingOptions } from "./utils.js";
 export {
   FeatureSchema,
   TechStackSchema,
@@ -11,7 +20,11 @@ export {
   type BuildResult,
   type QAReport,
 } from "./handoff.js";
-export { Pipeline, Loop, Parallel, Contract, Sprint } from "./orchestration/index.js";
+export {
+  Pipeline, Loop, Parallel, Contract, Sprint,
+  type PipelineOptions, type LoopOptions, type ParallelOptions, type ParallelResult,
+  type ContractOptions, type SprintOptions,
+} from "./orchestration/index.js";
 export { fullstackApp } from "./presets/fullstack.js";
 export { frontendDesign } from "./presets/frontend.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
