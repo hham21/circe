@@ -13,17 +13,20 @@ const HISTORY_FILE = "/tmp/circe-resume-history.json";
 
 const step1 = new BaseAgent({
   name: "step1-brainstorm",
-  prompt: "Generate 3 creative app name ideas for a todo app. Output as a numbered list.",
+  prompt: "Generate 3 creative band name ideas for a jazz trio. Output ONLY a numbered list of names, nothing else. Do NOT use any tools or create any files.",
+  tools: [],
 });
 
 const step2 = new BaseAgent({
   name: "step2-evaluate",
-  prompt: "Pick the best app name from the list and explain why in one sentence.",
+  prompt: "You receive a numbered list of band names. Pick the best one and explain why in one sentence. Format: 'BandName — reason'. Do NOT use any tools.",
+  tools: [],
 });
 
 const step3 = new BaseAgent({
   name: "step3-tagline",
-  prompt: "Create a catchy tagline for the chosen app name. Output ONLY the tagline.",
+  prompt: "You receive a band name with a reason. Create a catchy one-line slogan for that band. Output ONLY the slogan, nothing else. Do NOT use any tools.",
+  tools: [],
 });
 
 const bus = new EventBus();
@@ -44,7 +47,7 @@ if (existsSync(HISTORY_FILE)) {
   console.log("\nResult:", result);
 } else {
   console.log("=== Resume: first run (history will be saved) ===\n");
-  const result = await pipeline.run("Build a todo app");
+  const result = await pipeline.run("Name a jazz trio");
   console.log("\nResult:", result);
 }
 
