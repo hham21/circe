@@ -1,6 +1,5 @@
 import { BaseAgent } from "../agent.js";
 import { QAReportSchema } from "../handoff.js";
-import { Pipeline } from "../orchestration/pipeline.js";
 import { Loop } from "../orchestration/loop.js";
 
 interface FrontendDesignOptions {
@@ -16,26 +15,9 @@ function isPassed(result: unknown): boolean {
   return false;
 }
 
-export function frontendDesign(options?: FrontendDesignOptions): Pipeline {
+export function frontendDesign(options?: FrontendDesignOptions): Loop {
   const iterations = options?.iterations ?? 10;
   const passThreshold = options?.passThreshold ?? 9.5;
-
-  const planner = new BaseAgent({
-    name: "planner",
-    prompt: `You are a world-class design director. Given a design brief, create a detailed design specification.
-
-Include:
-- Color palette (specific hex codes)
-- Typography (Google Fonts choices, scale)
-- Spatial composition and layout strategy
-- Motion and interaction specs
-- Visual features and unique design elements
-- Image strategy: list specific real images to use with Wikimedia Commons URLs or other public domain sources
-
-Anti-patterns to avoid: purple gradients, generic hero sections, cookie-cutter card layouts, placeholder gradients instead of real images.
-
-Output a detailed design brief as structured text.`,
-  });
 
   const generator = new BaseAgent({
     name: "generator",
@@ -45,7 +27,7 @@ Rules:
 - Create index.html in the working directory
 - Commit each round to git
 - If _scores.md exists, read it to track progress. If it doesn't exist, this is the first round — just build.
-- If scores plateau, pivot your aesthetic approach
+- If scores plateau, pivot your aesthetic approach entirely — try a completely different visual direction
 - If scores drop, git checkout to restore the best version
 - Do NOT start a web server. The evaluator handles that.
 - Do NOT wait for scores or poll for files. Just build and finish.
@@ -54,6 +36,10 @@ Priority order:
 1. Fix any bugs tagged CRITICAL or BUG in _scores.md BEFORE adding new features
 2. Address specific feedback items from the evaluator
 3. Add new features or improvements
+
+Strategic decisions:
+- After each evaluation, decide: refine the current direction if scores are trending well, or pivot to an entirely different aesthetic if the approach is not working
+- The best designs are museum quality — pursue a distinct mood and identity, not safe defaults
 
 Images:
 - Download real images using curl and save to an img/ directory in the working directory
@@ -67,25 +53,45 @@ Target: ALL criteria must score ${passThreshold}/10 or higher.`,
 
   const evaluator = new BaseAgent({
     name: "evaluator",
-    prompt: `You are a ruthless design critic. Load the design-critique skill via use_skill("design-critique") for detailed methodology, anti-patterns, and scoring guide.
+    prompt: `You are a ruthless design critic with no memory of previous rounds. Load the design-critique skill via use_skill("design-critique") for detailed methodology, anti-patterns, and scoring guide.
 
 First, kill any existing serve process and start fresh:
   pkill -f "serve -l 8080" 2>/dev/null; sleep 1; npx serve -l 8080 . &
 Then wait 3 seconds and evaluate the design at http://localhost:8080.
 
-Use Playwright MCP to take screenshots, test interactions, and check responsiveness.
-Save screenshots to ./screenshots/round-N/.
+CRITICAL RULES:
+- Do NOT read _scores.md. Ever. It is not for you.
+- Do NOT reference, check, or verify "previous feedback" — you have none.
+- You are seeing this site for the FIRST TIME. Evaluate absolute quality, not improvement.
+- Do NOT read any file except index.html and CSS/JS files linked from it.
+
+Determine the current round number by counting existing screenshot folders:
+  ROUND=$(( $(ls -d ./screenshots/round-* 2>/dev/null | wc -l) + 1 ))
+  mkdir -p ./screenshots/round-$ROUND
+
+Use Playwright MCP to navigate the live page directly — click through it, scroll, interact with elements, test responsiveness at different viewports. Do not score from a static screenshot alone.
 
 Score each criterion (1-10):
-- design_quality (weight 0.35): Coherent whole, distinct identity, not generic
-- originality (weight 0.35): Custom creative choices, unique personality
-- craft (weight 0.15): Typography precision, spacing consistency, color harmony
-- functionality (weight 0.15): Usability, findability, interactions work
+- design_quality (weight 0.35): Does the design feel like a coherent whole rather than a collection of parts? Strong work means colors, typography, layout, imagery combine to create a distinct mood and identity.
+- originality (weight 0.35): Is there evidence of custom creative decisions, or is this template layouts, library defaults, and AI-generated patterns? Unmodified stock components or telltale AI slop (purple gradients over white cards) fail here.
+- craft (weight 0.15): Typography hierarchy, spacing consistency, color harmony, contrast ratios. A competence check — most reasonable implementations do fine; failing means broken fundamentals.
+- functionality (weight 0.15): Usability independent of aesthetics. Can users understand the interface, find primary actions, and complete tasks without guessing?
 
-A generic-looking site is a 5-6, not a 7-8. Score honestly.
-Evaluate absolute visual quality, not spec compliance. Judge as if seeing the site for the first time — do NOT read _scores.md or reference previous rounds.
+SCORING CALIBRATION:
+- 9-10: Exceptional. A professional designer would be impressed. Distinct identity that could not be mistaken for another site.
+- 7-8: Good. Competent and polished, but you've seen this layout before. Lacks a signature element.
+- 5-6: Generic. Template-quality. AI slop patterns. Safe choices everywhere.
+- 3-4: Poor. Broken fundamentals, clashing styles, or amateur execution.
+A score of 9+ means you would genuinely bookmark this site. Do not give 9 just because it is "good enough."
+
 Pass only if ALL criteria >= ${passThreshold}/10.
-Write scores to ./_scores.md after evaluation (for the generator to read, not for you).
+APPEND scores to ./_scores.md using Bash (do NOT overwrite — the generator tracks score trends across rounds):
+  cat >> ./_scores.md << EOF
+  ## Round $ROUND
+  | design_quality | originality | craft | functionality | passed |
+  |---|---|---|---|---|
+  | X | X | X | X | YES/NO |
+  EOF
 
 When giving feedback:
 - Tag critical bugs as "CRITICAL BUG:"
@@ -99,17 +105,16 @@ Output JSON:
   "feedback": ["specific feedback 1", ...]
 }`,
     skills: ["design-critique"],
-    tools: ["Read", "Write", "Bash", "Glob", "Grep"],
+    tools: ["Bash", "Glob"],
+    contextStrategy: "reset",
     mcpServers: {
       playwright: { command: "npx", args: ["@playwright/mcp@latest"] },
     },
     outputSchema: QAReportSchema,
   });
 
-  const designLoop = new Loop(generator, evaluator, {
+  return new Loop(generator, evaluator, {
     maxRounds: iterations,
     stopWhen: isPassed,
   });
-
-  return new Pipeline(planner, designLoop);
 }

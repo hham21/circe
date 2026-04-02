@@ -1,4 +1,4 @@
-// Frontend Design preset: Planner → Loop(Generator ⇄ Evaluator)
+// Frontend Design preset: Loop(Generator ⇄ Evaluator)
 import { frontendDesign } from "../src/presets/frontend.js";
 import { OutputFormatter } from "../src/cli/output.js";
 import { setFormatter, setWorkDir, setSkillRegistry } from "../src/context.js";
@@ -19,7 +19,7 @@ setSkillRegistry(new SkillRegistry([
   join(process.env.HOME!, ".circe", "skills"),
 ]));
 
-const app = frontendDesign({ iterations: 15 });
-const result = await app.run("Dutch art museum website");
+const loop = frontendDesign({ iterations: 15 });
+const result = await loop.run("Dutch art museum website");
 
 console.log("\nFinal:", JSON.stringify(result, null, 2));

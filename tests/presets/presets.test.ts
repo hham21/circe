@@ -7,6 +7,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 import { fullstackApp } from "../../src/presets/fullstack.js";
 import { frontendDesign } from "../../src/presets/frontend.js";
 import { Pipeline } from "../../src/orchestration/pipeline.js";
+import { Loop } from "../../src/orchestration/loop.js";
 
 describe("fullstackApp", () => {
   it("creates a Pipeline", () => {
@@ -28,13 +29,13 @@ describe("fullstackApp", () => {
 });
 
 describe("frontendDesign", () => {
-  it("creates a Pipeline", () => {
-    const app = frontendDesign();
-    expect(app).toBeInstanceOf(Pipeline);
+  it("creates a Loop", () => {
+    const loop = frontendDesign();
+    expect(loop).toBeInstanceOf(Loop);
   });
 
   it("accepts custom iterations", () => {
-    const app = frontendDesign({ iterations: 5 });
-    expect(app).toBeInstanceOf(Pipeline);
+    const loop = frontendDesign({ iterations: 5 });
+    expect(loop).toBeInstanceOf(Loop);
   });
 });
