@@ -60,6 +60,17 @@ describe("EventBus", () => {
     const bus = new EventBus();
     expect(bus.getCostSummary()).toEqual({ total: 0, perAgent: {} });
   });
+
+  it("getCostSummary aggregates step:done and branch:done costs", () => {
+    const bus = new EventBus();
+    bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
+    bus.emit({ type: "step:done", step: 1, agent: "builder", output: "", cost: 1.0, tokens: [200, 100], timestamp: 2 });
+    bus.emit({ type: "branch:done", branch: "frontend", result: "", cost: 0.8, timestamp: 3 });
+
+    const summary = bus.getCostSummary();
+    expect(summary.total).toBe(2.3);
+    expect(summary.perAgent).toEqual({ planner: 0.5, builder: 1.0, frontend: 0.8 });
+  });
 });
 
 describe("defaultShouldRetry", () => {
@@ -89,6 +100,11 @@ describe("defaultBackoff", () => {
     expect(defaultBackoff(0)).toBe(1000);
     expect(defaultBackoff(1)).toBe(2000);
     expect(defaultBackoff(2)).toBe(4000);
+  });
+
+  it("caps at 60 seconds", () => {
+    expect(defaultBackoff(20)).toBe(60_000);
+    expect(defaultBackoff(100)).toBe(60_000);
   });
 });
 

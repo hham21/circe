@@ -1,5 +1,26 @@
 import type { Runnable } from "./types.js";
 
+function extractBalancedBraces(text: string, start: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
 /**
  * Extract the first JSON string from text.
  * Checks for fenced code blocks first, then bare JSON objects.
@@ -11,9 +32,10 @@ export function findJsonString(text: string): string | null {
     return codeBlockMatch[1].trim();
   }
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    return jsonMatch[0];
+  const start = text.indexOf("{");
+  if (start !== -1) {
+    const extracted = extractBalancedBraces(text, start);
+    if (extracted) return extracted;
   }
 
   return null;

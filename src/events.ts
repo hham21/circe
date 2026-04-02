@@ -70,12 +70,26 @@ export class EventBus {
     const perAgent: Record<string, number> = {};
 
     for (const event of this.history) {
+      let cost: number | undefined;
+      let agent: string | undefined;
+
       if (event.type === "agent:done") {
-        total += event.cost;
-        perAgent[event.agent] = (perAgent[event.agent] ?? 0) + event.cost;
+        cost = event.cost;
+        agent = event.agent;
       } else if (event.type === "agent:error" && event.cost != null) {
-        total += event.cost;
-        perAgent[event.agent] = (perAgent[event.agent] ?? 0) + event.cost;
+        cost = event.cost;
+        agent = event.agent;
+      } else if (event.type === "step:done" && event.cost != null) {
+        cost = event.cost;
+        agent = event.agent;
+      } else if (event.type === "branch:done" && event.cost != null) {
+        cost = event.cost;
+        agent = event.branch;
+      }
+
+      if (cost != null && agent != null) {
+        total += cost;
+        perAgent[agent] = (perAgent[agent] ?? 0) + cost;
       }
     }
 
@@ -90,9 +104,9 @@ export interface RetryPolicy {
 }
 
 const NON_RETRYABLE_PATTERNS = [
-  /400/,
-  /401/,
-  /403/,
+  /\b400\b/,
+  /\b401\b/,
+  /\b403\b/,
   /bad request/i,
   /unauthorized/i,
   /forbidden/i,
@@ -105,8 +119,10 @@ export function defaultShouldRetry(error: Error): boolean {
   return !NON_RETRYABLE_PATTERNS.some((p) => p.test(msg));
 }
 
+const MAX_BACKOFF_MS = 60_000;
+
 export function defaultBackoff(attempt: number): number {
-  return 1000 * 2 ** attempt;
+  return Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
 }
 
 export async function executeWithRetry<T>(

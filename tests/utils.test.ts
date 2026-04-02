@@ -20,6 +20,12 @@ describe("findJsonString", () => {
     const text = '{"bare": true}\n```json\n{"block": true}\n```';
     expect(findJsonString(text)).toBe('{"block": true}');
   });
+
+  it("uses lazy matching for bare JSON (does not span multiple objects)", () => {
+    const text = '{"a": 1} some text {"b": 2}';
+    const result = findJsonString(text);
+    expect(result).toBe('{"a": 1}');
+  });
 });
 
 describe("parseTrailingOptions", () => {
