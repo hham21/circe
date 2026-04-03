@@ -61,6 +61,12 @@ function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
   if (event.type === "agent:error" && event.cost != null) {
     return { cost: event.cost, agent: event.agent };
   }
+  if (event.type === "step:done" && event.cost != null) {
+    return { cost: event.cost, agent: event.agent };
+  }
+  if (event.type === "branch:done" && event.cost != null) {
+    return { cost: event.cost, agent: event.branch };
+  }
   return null;
 }
 
@@ -73,6 +79,7 @@ export class EventBus {
   private handlers: HandlerEntry[] = [];
   private maxCost: number | null;
   private runningCost = 0;
+  private perAgentCost: Record<string, number> = {};
 
   constructor(options?: EventBusOptions) {
     this.maxCost = options?.maxCost ?? null;
@@ -91,6 +98,7 @@ export class EventBus {
     const costEntry = extractCostEntry(event);
     if (costEntry) {
       this.runningCost += costEntry.cost;
+      this.perAgentCost[costEntry.agent] = (this.perAgentCost[costEntry.agent] ?? 0) + costEntry.cost;
     }
 
     if (this.maxCost != null && this.runningCost > this.maxCost) {
@@ -111,18 +119,7 @@ export class EventBus {
   }
 
   getCostSummary(): { total: number; perAgent: Record<string, number> } {
-    let total = 0;
-    const perAgent: Record<string, number> = {};
-
-    for (const event of this.history) {
-      const entry = extractCostEntry(event);
-      if (entry == null) continue;
-
-      total += entry.cost;
-      perAgent[entry.agent] = (perAgent[entry.agent] ?? 0) + entry.cost;
-    }
-
-    return { total, perAgent };
+    return { total: this.runningCost, perAgent: { ...this.perAgentCost } };
   }
 }
 

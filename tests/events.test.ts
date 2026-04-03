@@ -61,15 +61,24 @@ describe("EventBus", () => {
     expect(bus.getCostSummary()).toEqual({ total: 0, perAgent: {} });
   });
 
-  it("getCostSummary ignores step:done and branch:done costs to avoid double-counting", () => {
+  it("getCostSummary aggregates step:done and branch:done costs", () => {
     const bus = new EventBus();
-    bus.emit({ type: "agent:done", agent: "planner", result: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
-    bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 2 });
+    bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
+    bus.emit({ type: "step:done", step: 1, agent: "builder", output: "", cost: 1.0, tokens: [200, 100], timestamp: 2 });
     bus.emit({ type: "branch:done", branch: "frontend", result: "", cost: 0.8, timestamp: 3 });
 
     const summary = bus.getCostSummary();
-    expect(summary.total).toBe(0.5);
-    expect(summary.perAgent).toEqual({ planner: 0.5 });
+    expect(summary.total).toBe(2.3);
+    expect(summary.perAgent).toEqual({ planner: 0.5, builder: 1.0, frontend: 0.8 });
+  });
+
+  it("maxCost triggers from step:done costs", () => {
+    const bus = new EventBus({ maxCost: 1.0 });
+    bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
+
+    expect(() => {
+      bus.emit({ type: "step:done", step: 1, agent: "builder", output: "", cost: 0.8, tokens: [200, 100], timestamp: 2 });
+    }).toThrow("Cost limit exceeded");
   });
 
   it("maxCost throws when total cost exceeds limit", () => {

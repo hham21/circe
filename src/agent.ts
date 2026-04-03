@@ -81,27 +81,30 @@ export class BaseAgent implements Runnable {
     this.validateInput(input);
     this.validateSkills();
 
-    const execution = this.executeQuery(input);
-    if (this.timeout <= 0) return execution;
+    if (this.timeout <= 0) return this.executeQuery(input);
 
-    let timer: ReturnType<typeof setTimeout>;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`[${this.name}] timed out after ${this.timeout}ms`)), this.timeout);
-    });
+    const abortController = new AbortController();
+    const timer = setTimeout(() => abortController.abort(), this.timeout);
+
     try {
-      return await Promise.race([execution, timeoutPromise]);
+      return await this.executeQuery(input, abortController);
+    } catch (err: any) {
+      if (abortController.signal.aborted) {
+        throw new Error(`[${this.name}] timed out after ${this.timeout}ms`);
+      }
+      throw err;
     } finally {
-      clearTimeout(timer!);
+      clearTimeout(timer);
     }
   }
 
-  private async executeQuery(input: unknown): Promise<unknown> {
+  private async executeQuery(input: unknown, abortController?: AbortController): Promise<unknown> {
     const formatter = getFormatter() as any;
     const workDir = getWorkDir();
     formatter?.agentStart?.(this.name, this.prompt.slice(0, 60));
 
     const userPrompt = this.buildUserPrompt(input);
-    const options = this.buildSdkOptions(workDir);
+    const options = this.buildSdkOptions(workDir, abortController);
     let metrics: ResultMetrics = { resultText: "", cost: 0, inputTokens: 0, outputTokens: 0 };
 
     try {
@@ -239,11 +242,15 @@ export class BaseAgent implements Runnable {
 
   // --- SDK option builders ---
 
-  private buildSdkOptions(workDir: string | null): Record<string, unknown> {
+  private buildSdkOptions(workDir: string | null, abortController?: AbortController): Record<string, unknown> {
     const options: Record<string, unknown> = {
       systemPrompt: this.buildSystemPrompt(),
       permissionMode: this.permissionMode,
     };
+
+    if (abortController) {
+      options.abortController = abortController;
+    }
 
     if (this.permissionMode === BYPASS_PERMISSIONS_MODE) {
       options.allowDangerouslySkipPermissions = true;
