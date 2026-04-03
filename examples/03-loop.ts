@@ -1,12 +1,13 @@
-// Loop: 작성자가 글을 쓰고, 평가자가 점수를 매기고, 8점 이상이면 종료
-import { BaseAgent } from "../src/agent.js";
-import { Loop } from "../src/orchestration/loop.js";
-import { QAReportSchema } from "../src/handoff.js";
-import { OutputFormatter } from "../src/cli/output.js";
-import { setFormatter } from "../src/context.js";
+// Example 03: Loop (GAN Pattern)
+// Primitives: Loop, BaseAgent, QAReportSchema
+// Difficulty: Beginner
+// Estimated cost: ~$0.05 (3 rounds max)
+//
+// Iterative refinement: a writer produces, a critic scores, repeat until quality threshold.
+// This is the GAN pattern — Generator vs Evaluator.
+// See 05-contract for a different adversarial pattern where both sides negotiate.
 
-// 라운드 진행 상황을 보기 위해 formatter 연결
-setFormatter(new OutputFormatter(true));
+import { BaseAgent, Loop, QAReportSchema, EventBus } from "../src/index.js";
 
 const writer = new BaseAgent({
   name: "writer",
@@ -14,26 +15,42 @@ const writer = new BaseAgent({
 If the input is a topic string, write a short haiku about it.
 If the input is a JSON QAReport with feedback, improve your haiku based on the feedback.
 Output ONLY the haiku, nothing else.`,
+  disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
 const critic = new BaseAgent({
   name: "critic",
-  prompt: `You are an impossibly harsh poetry critic. You almost never give high scores.
-Your standards: a haiku must have striking originality, unexpected imagery, emotional depth, and perfect rhythm.
-Clichés like "leaves falling", "gentle rain", "morning dew" are automatic failures.
-
-Score on "quality" (1-10). Be brutal — most haikus deserve 4-6.
-Only pass if quality >= 9. A 9 means genuinely publishable in a literary magazine.
+  prompt: `You are a harsh poetry critic. Score on "quality" (1-10).
+Only pass if quality >= 8. Most haikus deserve 4-6.
+Clichés like "leaves falling", "gentle rain" are automatic failures.
 
 Output JSON only:
-{"passed": true/false, "scores": {"quality": N}, "feedback": ["specific harsh feedback"]}`,
+{"passed": true/false, "scores": {"quality": N}, "feedback": ["specific feedback"]}`,
   outputSchema: QAReportSchema,
+  disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-console.log("=== Loop: write haiku → harsh critique (max 3 rounds, pass=9+) ===\n");
+const bus = new EventBus();
+
+bus.on("round:start", (e) => {
+  console.log(`  Round ${e.round} starting...`);
+});
+
+bus.on("round:done", (e) => {
+  const r = e.result as any;
+  console.log(`  Round ${e.round} done — quality: ${r?.scores?.quality ?? "?"}, passed: ${r?.passed ?? false}`);
+});
+
+console.log("=== Example 03: Loop (Haiku Writer ⇄ Harsh Critic) ===\n");
 const loop = new Loop(writer, critic, {
   maxRounds: 3,
   stopWhen: (r: any) => r?.passed === true,
+  eventBus: bus,
 });
 const result = await loop.run("autumn rain");
+
 console.log("\nFinal:", JSON.stringify(result, null, 2));
+console.log("\n--- Metrics ---");
+const cost = bus.getCostSummary();
+console.log(`Total cost: $${cost.total.toFixed(4)}`);
+console.log(`Rounds: ${bus.history.filter((e) => e.type === "round:done").length}`);
