@@ -70,9 +70,20 @@ function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
   return null;
 }
 
+export interface EventBusOptions {
+  maxCost?: number;
+}
+
 export class EventBus {
   history: OrchestratorEvent[] = [];
   private handlers: HandlerEntry[] = [];
+  private maxCost: number | null;
+  private runningCost = 0;
+  private perAgentCost: Record<string, number> = {};
+
+  constructor(options?: EventBusOptions) {
+    this.maxCost = options?.maxCost ?? null;
+  }
 
   on<T extends OrchestratorEvent["type"]>(
     type: T,
@@ -83,6 +94,19 @@ export class EventBus {
 
   emit(event: OrchestratorEvent): void {
     this.history.push(event);
+
+    const costEntry = extractCostEntry(event);
+    if (costEntry) {
+      this.runningCost += costEntry.cost;
+      this.perAgentCost[costEntry.agent] = (this.perAgentCost[costEntry.agent] ?? 0) + costEntry.cost;
+    }
+
+    if (this.maxCost != null && this.runningCost > this.maxCost) {
+      throw new Error(
+        `Cost limit exceeded: $${this.runningCost.toFixed(2)} spent, limit is $${this.maxCost.toFixed(2)}`,
+      );
+    }
+
     for (const entry of this.handlers) {
       if (entry.type === event.type) {
         try {
@@ -95,18 +119,7 @@ export class EventBus {
   }
 
   getCostSummary(): { total: number; perAgent: Record<string, number> } {
-    let total = 0;
-    const perAgent: Record<string, number> = {};
-
-    for (const event of this.history) {
-      const entry = extractCostEntry(event);
-      if (entry == null) continue;
-
-      total += entry.cost;
-      perAgent[entry.agent] = (perAgent[entry.agent] ?? 0) + entry.cost;
-    }
-
-    return { total, perAgent };
+    return { total: this.runningCost, perAgent: { ...this.perAgentCost } };
   }
 }
 
@@ -139,8 +152,41 @@ export function defaultBackoff(attempt: number): number {
   return Math.min(BASE_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS);
 }
 
-function toError(err: unknown): Error {
+export function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
+}
+
+export function errorMessage(err: unknown): string {
+  return toError(err).message;
+}
+
+/**
+ * Run a Runnable with optional retry + EventBus retry event emission.
+ * Shared by all orchestrators to eliminate duplicated retry wrappers.
+ */
+export async function runWithOptionalRetry(
+  agent: { name?: string; run(input: unknown): Promise<unknown> },
+  input: unknown,
+  retryPolicy: RetryPolicy | null,
+  eventBus: EventBus | null,
+): Promise<unknown> {
+  if (!retryPolicy) {
+    return agent.run(input);
+  }
+
+  return executeWithRetry(
+    () => agent.run(input),
+    retryPolicy,
+    (attempt) => {
+      eventBus?.emit({
+        type: "retry",
+        agent: agent.name ?? "unknown",
+        attempt,
+        maxAttempts: retryPolicy.maxRetries,
+        timestamp: Date.now(),
+      });
+    },
+  );
 }
 
 export async function executeWithRetry<T>(

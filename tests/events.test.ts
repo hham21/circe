@@ -71,6 +71,33 @@ describe("EventBus", () => {
     expect(summary.total).toBe(2.3);
     expect(summary.perAgent).toEqual({ planner: 0.5, builder: 1.0, frontend: 0.8 });
   });
+
+  it("maxCost triggers from step:done costs", () => {
+    const bus = new EventBus({ maxCost: 1.0 });
+    bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
+
+    expect(() => {
+      bus.emit({ type: "step:done", step: 1, agent: "builder", output: "", cost: 0.8, tokens: [200, 100], timestamp: 2 });
+    }).toThrow("Cost limit exceeded");
+  });
+
+  it("maxCost throws when total cost exceeds limit", () => {
+    const bus = new EventBus({ maxCost: 2.0 });
+    bus.emit({ type: "agent:done", agent: "a", result: "", cost: 1.5, tokens: [100, 50], timestamp: 1 });
+
+    expect(() => {
+      bus.emit({ type: "agent:done", agent: "b", result: "", cost: 1.0, tokens: [200, 100], timestamp: 2 });
+    }).toThrow("Cost limit exceeded: $2.50 spent, limit is $2.00");
+  });
+
+  it("maxCost does not throw when under limit", () => {
+    const bus = new EventBus({ maxCost: 5.0 });
+    bus.emit({ type: "agent:done", agent: "a", result: "", cost: 1.5, tokens: [100, 50], timestamp: 1 });
+    bus.emit({ type: "agent:done", agent: "b", result: "", cost: 2.0, tokens: [200, 100], timestamp: 2 });
+
+    const summary = bus.getCostSummary();
+    expect(summary.total).toBe(3.5);
+  });
 });
 
 describe("defaultShouldRetry", () => {

@@ -32,4 +32,10 @@ describe("Pipeline", () => {
     const result = await new Pipeline(new FakeAgent("a", (i) => i ?? "default")).run(null);
     expect(result).toBe("default");
   });
+
+  it("wraps error with step context", async () => {
+    const good = new FakeAgent("good", (i) => i);
+    const bad = { name: "bad-agent", async run() { throw new Error("API error"); } };
+    await expect(new Pipeline(good, bad).run("x")).rejects.toThrow("[Pipeline:step-1/bad-agent] API error");
+  });
 });

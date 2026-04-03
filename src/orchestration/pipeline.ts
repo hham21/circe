@@ -1,6 +1,6 @@
 import type { Runnable } from "../types.js";
 import type { EventBus, RetryPolicy, OrchestratorEvent } from "../events.js";
-import { executeWithRetry } from "../events.js";
+import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions } from "../utils.js";
 
 export interface PipelineOptions {
@@ -57,14 +57,14 @@ export class Pipeline implements Runnable {
   }
 
   private async runStep(agent: Runnable, stepIndex: number, input: unknown): Promise<unknown> {
-    const agentName = (agent as any).name ?? `step-${stepIndex}`;
+    const agentName = agent.name ?? `step-${stepIndex}`;
 
     this.eventBus?.emit({ type: "step:start", step: stepIndex, agent: agentName, timestamp: Date.now() });
 
     try {
-      const output = await this.executeAgent(agent, agentName, input);
+      const output = await runWithOptionalRetry(agent, input, this.retryPolicy, this.eventBus);
 
-      const metrics = (agent as any).lastMetrics;
+      const metrics = agent.lastMetrics;
       this.eventBus?.emit({
         type: "step:done",
         step: stepIndex,
@@ -76,36 +76,16 @@ export class Pipeline implements Runnable {
       });
 
       return output;
-    } catch (err: any) {
+    } catch (err) {
       this.eventBus?.emit({
         type: "step:error",
         step: stepIndex,
         agent: agentName,
-        error: err.message ?? String(err),
+        error: errorMessage(err),
         timestamp: Date.now(),
       });
-      throw err;
+      throw new Error(`[Pipeline:step-${stepIndex}/${agentName}] ${errorMessage(err)}`);
     }
-  }
-
-  private async executeAgent(agent: Runnable, agentName: string, input: unknown): Promise<unknown> {
-    if (!this.retryPolicy) {
-      return agent.run(input);
-    }
-
-    return executeWithRetry(
-      () => agent.run(input),
-      this.retryPolicy,
-      (attempt) => {
-        this.eventBus?.emit({
-          type: "retry",
-          agent: agentName,
-          attempt,
-          maxAttempts: this.retryPolicy!.maxRetries,
-          timestamp: Date.now(),
-        });
-      },
-    );
   }
 
   private findLastCompletedStep(
