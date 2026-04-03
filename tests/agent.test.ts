@@ -17,6 +17,7 @@ describe("BaseAgent", () => {
     expect(a.name).toBe("test");
     expect(a.prompt).toBe("You are a tester.");
     expect(a.tools).toBeNull();
+    expect(a.disallowedTools).toEqual([]);
     expect(a.skills).toEqual([]);
     expect(a.contextStrategy).toBe("compaction");
     expect(a.permissionMode).toBe("bypassPermissions");
@@ -33,9 +34,19 @@ describe("BaseAgent", () => {
       continueSession: true,
     });
     expect(a.tools).toEqual(["Read", "Bash"]);
+    expect(a.disallowedTools).toEqual([]);
     expect(a.skills).toEqual(["qa"]);
     expect(a.contextStrategy).toBe("reset");
     expect(a.continueSession).toBe(true);
+  });
+
+  it("creates with custom disallowedTools", () => {
+    const a = new BaseAgent({
+      name: "safe",
+      prompt: "No file access.",
+      disallowedTools: ["Bash", "Write", "Edit"],
+    });
+    expect(a.disallowedTools).toEqual(["Bash", "Write", "Edit"]);
   });
 
   it("builds system prompt without skills", () => {
@@ -256,6 +267,17 @@ describe("loadAgent", () => {
     const a = await loadAgent("test-agent");
     expect(a).toBeInstanceOf(BaseAgent);
     expect(a.name).toBe("test-agent");
+  });
+
+  it("loads agent with disallowedTools from file", async () => {
+    const config = {
+      name: "safe-agent",
+      prompt: "No file ops.",
+      disallowedTools: ["Bash", "Write"],
+    };
+    writeFileSync(join(tmpDir, "agents", "safe-agent.json"), JSON.stringify(config));
+    const a = await loadAgent("safe-agent");
+    expect(a.disallowedTools).toEqual(["Bash", "Write"]);
   });
 
   it("throws for missing file", async () => {

@@ -8,7 +8,10 @@ import { findJsonString } from "./utils.js";
 export interface AgentConfig {
   name: string;
   prompt: string;
+  /** Auto-approve list, NOT a restriction. Unlisted tools fall through to permissionMode. */
   tools?: string[] | null;
+  /** Tools to always deny. Checked before allowedTools and permissionMode. */
+  disallowedTools?: string[];
   skills?: string[];
   mcpServers?: Record<string, unknown>;
   contextStrategy?: "compaction" | "reset";
@@ -36,6 +39,7 @@ export class BaseAgent implements Runnable {
   name: string;
   prompt: string;
   tools: string[] | null;
+  disallowedTools: string[];
   skills: string[];
   mcpServers: Record<string, unknown>;
   contextStrategy: "compaction" | "reset";
@@ -56,6 +60,7 @@ export class BaseAgent implements Runnable {
     this.name = config.name;
     this.prompt = config.prompt;
     this.tools = config.tools ?? null;
+    this.disallowedTools = config.disallowedTools ?? [];
     this.skills = config.skills ?? [];
     this.mcpServers = config.mcpServers ?? {};
     this.contextStrategy = config.contextStrategy ?? "compaction";
@@ -258,6 +263,9 @@ export class BaseAgent implements Runnable {
     if (this.tools) {
       options.allowedTools = this.tools;
     }
+    if (this.disallowedTools.length > 0) {
+      options.disallowedTools = this.disallowedTools;
+    }
     if (Object.keys(this.mcpServers).length > 0) {
       options.mcpServers = this.mcpServers;
     }
@@ -335,6 +343,7 @@ const AgentConfigFileSchema = z.object({
   name: z.string(),
   prompt: z.string(),
   tools: z.array(z.string()).nullable().optional(),
+  disallowedTools: z.array(z.string()).optional(),
   skills: z.array(z.string()).optional(),
   mcpServers: z.record(z.unknown()).optional(),
   contextStrategy: z.enum(["compaction", "reset"]).optional(),
