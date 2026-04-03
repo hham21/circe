@@ -7,7 +7,10 @@
 // Different from Loop (03) — both sides have agency here.
 // Compare with 03-loop: Loop has a passive creator, Contract has two active negotiators.
 
-import { BaseAgent, Contract, EventBus } from "../src/index.js";
+import { BaseAgent, Contract, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const proposer = new BaseAgent({
   name: "proposer",

@@ -7,7 +7,10 @@
 // Shows per-step cost breakdown via lastMetrics.
 // See 06-compose for nesting Pipeline with other primitives.
 
-import { BaseAgent, Pipeline, EventBus } from "../src/index.js";
+import { BaseAgent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const researcher = new BaseAgent({
   name: "researcher",

@@ -7,7 +7,10 @@
 // getCostSummary() gives per-agent cost breakdown.
 // Add this pattern to any example above for full observability.
 
-import { BaseAgent, Pipeline, EventBus } from "../src/index.js";
+import { BaseAgent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const bus = new EventBus();
 

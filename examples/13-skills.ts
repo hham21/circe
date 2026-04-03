@@ -8,8 +8,11 @@
 // Self-contained: creates skill dir, runs agent, cleans up.
 // Skills enhance any agent — combine with any primitive above.
 
-import { BaseAgent, SkillRegistry, setSkillRegistry } from "../src/index.js";
+import { BaseAgent, SkillRegistry, setSkillRegistry, OutputFormatter, setFormatter } from "../src/index.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 

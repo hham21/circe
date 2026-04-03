@@ -7,7 +7,10 @@
 // Pipeline where stage 1 is a Contract (negotiate specs) and stage 2 is a Loop (iterative build).
 // You've seen Pipeline (02), Loop (03), Contract (05) individually. Now they compose.
 
-import { BaseAgent, Pipeline, Contract, Loop, QAReportSchema, EventBus } from "../src/index.js";
+import { BaseAgent, Pipeline, Contract, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 // Phase 1: Contract — negotiate what to build
 const specWriter = new BaseAgent({

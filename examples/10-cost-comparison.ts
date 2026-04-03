@@ -6,7 +6,10 @@
 // Same task solved 3 different ways. Prints a comparison table.
 // Demonstrates why different orchestration shapes exist — different tradeoffs.
 
-import { BaseAgent, Pipeline, Loop, Contract, QAReportSchema, EventBus } from "../src/index.js";
+import { BaseAgent, Pipeline, Loop, Contract, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const TASK = "Write a product description for a smart water bottle that tracks hydration";
 

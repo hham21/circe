@@ -6,7 +6,10 @@
 // The simplest possible example: create one agent, run it, print the result and cost.
 // This is the "hello world" of Circe.
 
-import { BaseAgent } from "../src/index.js";
+import { BaseAgent, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const agent = new BaseAgent({
   name: "echo",

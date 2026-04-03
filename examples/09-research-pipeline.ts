@@ -6,7 +6,10 @@
 // 3 research agents gather info in parallel → synthesizer combines → reviewer refines.
 // Builds on 02-pipeline, 03-loop, and 04-parallel combined.
 
-import { BaseAgent, Pipeline, Parallel, Loop, QAReportSchema, EventBus } from "../src/index.js";
+import { BaseAgent, Pipeline, Parallel, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 // Phase 1: Parallel research from 3 angles
 const historian = new BaseAgent({
@@ -46,7 +49,7 @@ Output ONLY the improved summary.`,
 
 const editor = new BaseAgent({
   name: "editor",
-  prompt: `Score the summary on "quality" (1-10). Pass if quality >= 7.
+  prompt: `Score the summary on "quality" (1-10). Pass if quality >= 10.
 Check for: coherence, factual integration, readability.
 Output JSON: {"passed": true/false, "scores": {"quality": N}, "feedback": ["feedback"]}`,
   outputSchema: QAReportSchema,

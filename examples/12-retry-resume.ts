@@ -10,8 +10,11 @@
 // Combines EventBus (11) with retry and Pipeline.resume() capabilities.
 
 import type { Runnable, OrchestratorEvent } from "../src/index.js";
-import { BaseAgent, Pipeline, EventBus } from "../src/index.js";
+import { BaseAgent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 import { writeFileSync, readFileSync } from "node:fs";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const HISTORY_FILE = "/tmp/circe-retry-resume-history.json";
 

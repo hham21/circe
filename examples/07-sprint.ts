@@ -7,7 +7,10 @@
 // Sprint expects input as { sprints: [...definitions] } — each definition
 // is passed to the runner agent sequentially.
 
-import { BaseAgent, Sprint, EventBus } from "../src/index.js";
+import { BaseAgent, Sprint, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const copywriter = new BaseAgent({
   name: "copywriter",

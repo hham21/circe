@@ -8,7 +8,10 @@
 // See 06-compose for Parallel inside a Pipeline.
 
 import type { Runnable } from "../src/index.js";
-import { BaseAgent, Parallel, EventBus } from "../src/index.js";
+import { BaseAgent, Parallel, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const optimist = new BaseAgent({
   name: "optimist",
