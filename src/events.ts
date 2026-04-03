@@ -64,6 +64,9 @@ function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
   if (event.type === "step:done" && event.cost != null) {
     return { cost: event.cost, agent: event.agent };
   }
+  if (event.type === "round:done" && event.cost != null) {
+    return { cost: event.cost, agent: `round-${event.round}` };
+  }
   if (event.type === "branch:done" && event.cost != null) {
     return { cost: event.cost, agent: event.branch };
   }
