@@ -66,4 +66,10 @@ describe("Loop", () => {
     const a = { name: "a", run: async () => {} };
     expect(() => new Loop(a)).toThrow("Loop requires at least two agents");
   });
+
+  it("wraps error with round context", async () => {
+    const gen = { name: "gen", async run() { return "ok"; } };
+    const bad = { name: "bad-eval", async run() { throw new Error("boom"); } };
+    await expect(new Loop(gen, bad, { maxRounds: 1 }).run("x")).rejects.toThrow("[Loop:round-1] boom");
+  });
 });

@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export interface Runnable {
+  name?: string;
+  lastMetrics?: { cost: number; inputTokens: number; outputTokens: number } | null;
   run(input: unknown): Promise<unknown>;
 }
 

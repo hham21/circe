@@ -37,5 +37,4 @@ export { fullstackApp } from "./presets/fullstack.js";
 export { frontendDesign } from "./presets/frontend.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
 export { setSkillRegistry, getSkillRegistry } from "./context.js";
-export { tool } from "./tools/custom.js";
 export { RunContextSchema, type RunContext, type Runnable } from "./types.js";

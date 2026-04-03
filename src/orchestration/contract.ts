@@ -1,8 +1,7 @@
 import type { Runnable } from "../types.js";
-import { getFormatter } from "../context.js";
 import { findJsonString } from "../utils.js";
 import type { EventBus, RetryPolicy } from "../events.js";
-import { executeWithRetry } from "../events.js";
+import { runWithOptionalRetry, errorMessage } from "../events.js";
 
 const DEFAULT_MAX_ROUNDS = 3;
 
@@ -13,6 +12,7 @@ export interface ContractOptions {
 }
 
 export class Contract implements Runnable {
+  name?: string;
   private proposer: Runnable;
   private reviewer: Runnable;
   private maxRounds: number;
@@ -28,13 +28,10 @@ export class Contract implements Runnable {
   }
 
   async run(input: unknown): Promise<unknown> {
-    const formatter = getFormatter() as any;
     let proposalInput = input;
     let review: unknown;
 
     for (let round = 0; round < this.maxRounds; round++) {
-      formatter?.logInfo?.(`Contract round ${round + 1}/${this.maxRounds}`);
-
       this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
       try {
@@ -43,13 +40,11 @@ export class Contract implements Runnable {
         this.eventBus?.emit({
           type: "round:error",
           round,
-          error: err.message ?? String(err),
+          error: errorMessage(err),
           timestamp: Date.now(),
         });
-        throw err;
+        throw new Error(`[Contract:round-${round + 1}] ${errorMessage(err)}`);
       }
-
-      formatter?.logRoundResult?.(review);
 
       if (this.isAccepted(review)) {
         return review;
@@ -63,10 +58,10 @@ export class Contract implements Runnable {
 
   private async executeRound(round: number, proposalInput: unknown): Promise<unknown> {
     const proposal = await this.runAgentWithRetry(this.proposer, proposalInput);
-    const proposerCost = extractAgentCost(this.proposer);
+    const proposerCost = this.proposer.lastMetrics?.cost ?? 0;
 
     const review = this.parseReview(await this.runAgentWithRetry(this.reviewer, proposal));
-    const reviewerCost = extractAgentCost(this.reviewer);
+    const reviewerCost = this.reviewer.lastMetrics?.cost ?? 0;
 
     const roundCost = proposerCost + reviewerCost;
     this.eventBus?.emit({
@@ -81,24 +76,7 @@ export class Contract implements Runnable {
   }
 
   private async runAgentWithRetry(agent: Runnable, agentInput: unknown): Promise<unknown> {
-    if (!this.retryPolicy) {
-      return agent.run(agentInput);
-    }
-
-    return executeWithRetry(
-      () => agent.run(agentInput),
-      this.retryPolicy,
-      (attempt) => {
-        const agentName = (agent as any).name ?? "unknown";
-        this.eventBus?.emit({
-          type: "retry",
-          agent: agentName,
-          attempt,
-          maxAttempts: this.retryPolicy!.maxRetries,
-          timestamp: Date.now(),
-        });
-      },
-    );
+    return runWithOptionalRetry(agent, agentInput, this.retryPolicy, this.eventBus);
   }
 
   private parseReview(review: unknown): unknown {
@@ -114,11 +92,7 @@ export class Contract implements Runnable {
 
   private isAccepted(review: unknown): boolean {
     if (review == null || typeof review !== "object") return false;
-    const accepted = (review as any).accepted;
+    const accepted = (review as Record<string, unknown>).accepted;
     return typeof accepted === "boolean" && accepted;
   }
-}
-
-function extractAgentCost(agent: Runnable): number {
-  return (agent as any).lastMetrics?.cost ?? 0;
 }

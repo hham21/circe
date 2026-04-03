@@ -1,6 +1,6 @@
 import type { Runnable } from "../types.js";
 import type { EventBus, RetryPolicy } from "../events.js";
-import { executeWithRetry } from "../events.js";
+import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions } from "../utils.js";
 
 export interface ParallelOptions {
@@ -15,11 +15,8 @@ export type ParallelResult = Record<
   | { status: "rejected"; error: string }
 >;
 
-function agentName(agent: Runnable): string {
-  return (agent as any).name ?? String(agent);
-}
-
 export class Parallel implements Runnable {
+  name?: string;
   private agents: Runnable[];
   private throwOnError: boolean;
   private retryPolicy: RetryPolicy | null;
@@ -47,13 +44,13 @@ export class Parallel implements Runnable {
   }
 
   private async runAgent(agent: Runnable, input: unknown): Promise<{ name: string; result: unknown }> {
-    const name = agentName(agent);
+    const name = agent.name ?? String(agent);
     this.eventBus?.emit({ type: "branch:start", branch: name, timestamp: Date.now() });
 
     try {
-      const result = await this.runWithOptionalRetry(agent, name, input);
+      const result = await runWithOptionalRetry(agent, input, this.retryPolicy, this.eventBus);
 
-      const metrics = (agent as any).lastMetrics;
+      const metrics = agent.lastMetrics;
       this.eventBus?.emit({
         type: "branch:done",
         branch: name,
@@ -63,35 +60,15 @@ export class Parallel implements Runnable {
       });
 
       return { name, result };
-    } catch (err: any) {
+    } catch (err) {
       this.eventBus?.emit({
         type: "branch:error",
         branch: name,
-        error: err.message ?? String(err),
+        error: errorMessage(err),
         timestamp: Date.now(),
       });
       throw err;
     }
-  }
-
-  private async runWithOptionalRetry(agent: Runnable, name: string, input: unknown): Promise<unknown> {
-    if (!this.retryPolicy) {
-      return agent.run(input);
-    }
-
-    return executeWithRetry(
-      () => agent.run(input),
-      this.retryPolicy,
-      (attempt) => {
-        this.eventBus?.emit({
-          type: "retry",
-          agent: name,
-          attempt,
-          maxAttempts: this.retryPolicy!.maxRetries,
-          timestamp: Date.now(),
-        });
-      },
-    );
   }
 
   private collectResults(
@@ -105,8 +82,7 @@ export class Parallel implements Runnable {
         const { name, result } = outcome.value;
         results[name] = { status: "fulfilled", value: result };
       } else {
-        // When an agent throws, its name must be resolved from the original agent list
-        const name = agentName(this.agents[i]);
+        const name = this.agents[i].name ?? String(this.agents[i]);
         const errorMsg = outcome.reason?.message ?? String(outcome.reason);
         results[name] = { status: "rejected", error: errorMsg };
         if (!firstError) {

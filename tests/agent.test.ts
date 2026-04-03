@@ -2,9 +2,9 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { BaseAgent, agent } from "../src/agent.js";
+import { BaseAgent, agent, loadAgent } from "../src/agent.js";
 import { QAReportSchema } from "../src/handoff.js";
-import { setSkillRegistry } from "../src/context.js";
+import { setSkillRegistry, setWorkDir } from "../src/context.js";
 import { SkillRegistry } from "../src/tools/skills.js";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
@@ -103,10 +103,21 @@ describe("BaseAgent", () => {
     expect(result).toBe("not valid json at all");
   });
 
-  it("estimates cost", () => {
+  it("estimates cost with default pricing", () => {
     const a = new BaseAgent({ name: "test", prompt: "" });
     const cost = a.estimateCost(1_000_000, 1_000_000);
     expect(cost).toBeCloseTo(90.0);
+  });
+
+  it("estimates cost with custom costPerMTokens", () => {
+    const a = new BaseAgent({
+      name: "test",
+      prompt: "",
+      costPerMTokens: { input: 3, output: 15 },
+    });
+    const cost = a.estimateCost(1_000_000, 1_000_000);
+    // (1M * 3 + 1M * 15) / 1M = 18
+    expect(cost).toBeCloseTo(18.0);
   });
 
   it("stores inputSchema when provided", () => {
@@ -179,5 +190,85 @@ describe("BaseAgent skill integration", () => {
   it("run throws when declared skill is missing", async () => {
     const a = agent({ name: "test", prompt: "Do stuff.", skills: ["nonexistent"] });
     await expect(a.run("hello")).rejects.toThrow("Required skill(s) not found: nonexistent");
+  });
+});
+
+describe("BaseAgent.buildUserPrompt", () => {
+  afterEach(() => setWorkDir(null));
+
+  it("includes workDir rule when set", () => {
+    setWorkDir("/tmp/test-project");
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    const prompt = a.buildUserPrompt("build an app");
+    expect(prompt).toContain("/tmp/test-project");
+    expect(prompt).toContain("build an app");
+  });
+
+  it("includes fallback rule when no workDir", () => {
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    const prompt = a.buildUserPrompt("build an app");
+    expect(prompt).toContain("relative paths");
+  });
+
+  it("handles null input", () => {
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    const prompt = a.buildUserPrompt(null);
+    expect(prompt).toContain("relative paths");
+    expect(prompt).not.toContain("null");
+  });
+
+  it("stringifies object input as JSON", () => {
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    const prompt = a.buildUserPrompt({ key: "value" });
+    expect(prompt).toContain('"key": "value"');
+  });
+});
+
+describe("BaseAgent timeout", () => {
+  it("stores timeout from config", () => {
+    const a = new BaseAgent({ name: "test", prompt: "", timeout: 5000 });
+    expect(a.timeout).toBe(5000);
+  });
+
+  it("defaults timeout to 0", () => {
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    expect(a.timeout).toBe(0);
+  });
+});
+
+describe("loadAgent", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "circe-load-agent-"));
+    mkdirSync(join(tmpDir, "agents"), { recursive: true });
+    process.env.CIRCE_HOME = tmpDir;
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    delete process.env.CIRCE_HOME;
+  });
+
+  it("loads valid agent from file", async () => {
+    const config = { name: "test-agent", prompt: "You are a tester." };
+    writeFileSync(join(tmpDir, "agents", "test-agent.json"), JSON.stringify(config));
+    const a = await loadAgent("test-agent");
+    expect(a).toBeInstanceOf(BaseAgent);
+    expect(a.name).toBe("test-agent");
+  });
+
+  it("throws for missing file", async () => {
+    await expect(loadAgent("nonexistent")).rejects.toThrow("Agent file not found");
+  });
+
+  it("throws for invalid JSON", async () => {
+    writeFileSync(join(tmpDir, "agents", "bad.json"), "not json{{{");
+    await expect(loadAgent("bad")).rejects.toThrow("Invalid JSON");
+  });
+
+  it("throws for invalid schema", async () => {
+    writeFileSync(join(tmpDir, "agents", "bad-schema.json"), JSON.stringify({ foo: "bar" }));
+    await expect(loadAgent("bad-schema")).rejects.toThrow("Invalid agent config");
   });
 });

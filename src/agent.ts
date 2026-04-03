@@ -16,6 +16,8 @@ export interface AgentConfig {
   continueSession?: boolean;
   inputSchema?: ZodSchema;
   outputSchema?: ZodSchema;
+  costPerMTokens?: { input: number; output: number };
+  timeout?: number;
 }
 
 export interface ResultMetrics {
@@ -25,8 +27,7 @@ export interface ResultMetrics {
   outputTokens: number;
 }
 
-const INPUT_COST_PER_M = 15;
-const OUTPUT_COST_PER_M = 75;
+const DEFAULT_COST_PER_M_TOKENS = { input: 15, output: 75 };
 const BYPASS_PERMISSIONS_MODE = "bypassPermissions";
 const SKILL_SERVER_NAME = "circe-skills";
 const INPUT_PREVIEW_MAX_LENGTH = 80;
@@ -42,6 +43,8 @@ export class BaseAgent implements Runnable {
   continueSession: boolean;
   inputSchema: ZodSchema | null;
   outputSchema: ZodSchema | null;
+  private costPerMTokens: { input: number; output: number };
+  private timeout: number;
   private sessionId: string | null = null;
   private _lastMetrics: ResultMetrics | null = null;
 
@@ -60,6 +63,8 @@ export class BaseAgent implements Runnable {
     this.continueSession = config.continueSession ?? false;
     this.inputSchema = config.inputSchema ?? null;
     this.outputSchema = config.outputSchema ?? null;
+    this.costPerMTokens = config.costPerMTokens ?? DEFAULT_COST_PER_M_TOKENS;
+    this.timeout = config.timeout ?? 0;
   }
 
   // --- Public methods ---
@@ -76,6 +81,21 @@ export class BaseAgent implements Runnable {
     this.validateInput(input);
     this.validateSkills();
 
+    const execution = this.executeQuery(input);
+    if (this.timeout <= 0) return execution;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`[${this.name}] timed out after ${this.timeout}ms`)), this.timeout);
+    });
+    try {
+      return await Promise.race([execution, timeoutPromise]);
+    } finally {
+      clearTimeout(timer!);
+    }
+  }
+
+  private async executeQuery(input: unknown): Promise<unknown> {
     const formatter = getFormatter() as any;
     const workDir = getWorkDir();
     formatter?.agentStart?.(this.name, this.prompt.slice(0, 60));
@@ -133,7 +153,7 @@ export class BaseAgent implements Runnable {
   }
 
   estimateCost(inputTokens: number, outputTokens: number): number {
-    return (inputTokens * INPUT_COST_PER_M + outputTokens * OUTPUT_COST_PER_M) / 1_000_000;
+    return (inputTokens * this.costPerMTokens.input + outputTokens * this.costPerMTokens.output) / 1_000_000;
   }
 
   // --- run() implementation details ---
@@ -304,10 +324,43 @@ export function agent(config: AgentConfig): BaseAgent {
   return new BaseAgent(config);
 }
 
+const AgentConfigFileSchema = z.object({
+  name: z.string(),
+  prompt: z.string(),
+  tools: z.array(z.string()).nullable().optional(),
+  skills: z.array(z.string()).optional(),
+  mcpServers: z.record(z.unknown()).optional(),
+  contextStrategy: z.enum(["compaction", "reset"]).optional(),
+  permissionMode: z.string().optional(),
+  continueSession: z.boolean().optional(),
+  costPerMTokens: z.object({ input: z.number(), output: z.number() }).optional(),
+  timeout: z.number().optional(),
+});
+
 export async function loadAgent(name: string): Promise<BaseAgent> {
   const home = process.env.CIRCE_HOME ?? `${process.env.HOME}/.circe`;
   const agentPath = `${home}/agents/${name}.json`;
   const { readFileSync } = await import("node:fs");
-  const agentConfig = JSON.parse(readFileSync(agentPath, "utf-8"));
-  return new BaseAgent(agentConfig);
+
+  let raw: string;
+  try {
+    raw = readFileSync(agentPath, "utf-8");
+  } catch {
+    throw new Error(`Agent file not found: ${agentPath}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Invalid JSON in agent file: ${agentPath}`);
+  }
+
+  const result = AgentConfigFileSchema.safeParse(parsed);
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+    throw new Error(`Invalid agent config in ${agentPath}: ${issues}`);
+  }
+
+  return new BaseAgent(result.data);
 }
