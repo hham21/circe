@@ -41,3 +41,17 @@
 **Context:** `round:done` cost tracking was added to `extractCostEntry` but this only helps standalone Loop/Contract. When nested inside Pipeline, the cost is invisible because Pipeline reads `lastMetrics` from its steps. Fix: each orchestrator stores `_lastMetrics` (same pattern as BaseAgent) with the sum of all agent costs from its last execution.
 
 **Depends on / blocked by:** None. Standalone fix.
+
+## Loop returnProducer option
+
+**What:** Add an option to Loop that returns the producer (first agent)'s last output instead of the evaluator (last agent)'s output. Currently `Loop.run()` always returns the evaluator's QAReport, not the producer's content.
+
+**Why:** In a writer ⇄ critic loop, users want the final polished content (writer output), not the critic's score card. Right now the only way to get the writer's output is to capture it via EventBus events, which is awkward.
+
+**Pros:** Natural API for the most common Loop use case. No workaround needed.
+
+**Cons:** Adds a boolean option to LoopOptions. Need to decide naming (`returnProducer`, `returnFirst`, `returnContent`).
+
+**Context:** Loop runs [producer, evaluator] per round. `executeRound()` returns the evaluator's result, which becomes `Loop.run()`'s return value. With this option, Loop would store the producer's output from the last round and return that instead. Visible in examples 03, 08, 09 where the final result is a QAReport JSON rather than the actual haiku/code/summary.
+
+**Depends on / blocked by:** None. Standalone improvement.
