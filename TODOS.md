@@ -27,3 +27,17 @@
 **Context:** SDK docs show `outputFormat: { type: 'json_schema', schema: JSONSchema }` as a query option. Zod has `zod-to-json-schema` for conversion. After this, examples like 03-loop and 08-code-review can drop the "Output JSON only" prompt instruction.
 
 **Depends on / blocked by:** None. Standalone improvement.
+
+## lastMetrics for nested orchestrators
+
+**What:** Add `lastMetrics` getter to Loop, Contract, Parallel, and Sprint. Each returns the sum of all agent costs from its last run. This lets Pipeline track cost via `step:done` when orchestrators are nested (e.g., `Pipeline(Contract, Loop)`).
+
+**Why:** Currently Pipeline reads `agent.lastMetrics?.cost` for each step's `step:done` event. When a step is a nested orchestrator (Loop, Contract), `lastMetrics` is undefined so the cost is lost. In 06-compose.ts, Contract's cost doesn't appear in `getCostSummary().perAgent` because Pipeline's `step:done` for that step has `cost: undefined`.
+
+**Pros:** Accurate cost tracking for composed workflows. `getCostSummary()` reports full cost breakdown regardless of nesting depth.
+
+**Cons:** Each orchestrator needs to accumulate cost from its agents during `run()`. Small bookkeeping overhead.
+
+**Context:** `round:done` cost tracking was added to `extractCostEntry` but this only helps standalone Loop/Contract. When nested inside Pipeline, the cost is invisible because Pipeline reads `lastMetrics` from its steps. Fix: each orchestrator stores `_lastMetrics` (same pattern as BaseAgent) with the sum of all agent costs from its last execution.
+
+**Depends on / blocked by:** None. Standalone fix.
