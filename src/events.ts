@@ -37,7 +37,7 @@ export type OrchestratorEvent =
   | { type: "retry"; agent: string; attempt: number; maxAttempts: number; timestamp: number }
   | { type: "pipeline:done"; /** USD */ totalCost: number; timestamp: number }
   | { type: "sprint:start"; index: number; definition: unknown; timestamp: number }
-  | { type: "sprint:done"; index: number; result: unknown; timestamp: number }
+  | { type: "sprint:done"; index: number; result: unknown; /** USD */ cost?: number; timestamp: number }
   | { type: "sprint:error"; index: number; error: string; timestamp: number };
 
 type EventHandler<T extends OrchestratorEvent["type"]> = (
@@ -66,6 +66,9 @@ function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
   }
   if (event.type === "round:done" && event.cost != null) {
     return { cost: event.cost, agent: `round-${event.round}` };
+  }
+  if (event.type === "sprint:done" && event.cost != null) {
+    return { cost: event.cost, agent: `sprint-${event.index}` };
   }
   if (event.type === "branch:done" && event.cost != null) {
     return { cost: event.cost, agent: event.branch };

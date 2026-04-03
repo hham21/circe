@@ -30,7 +30,8 @@ export class Sprint implements Runnable {
       try {
         const result = await runWithOptionalRetry(this.runner, sprintDef, this.retryPolicy, this.eventBus);
         sprintResults.push(result);
-        this.eventBus?.emit({ type: "sprint:done", index, result, timestamp: Date.now() });
+        const cost = this.runner.lastMetrics?.cost;
+        this.eventBus?.emit({ type: "sprint:done", index, result, cost, timestamp: Date.now() });
       } catch (error) {
         this.eventBus?.emit({
           type: "sprint:error",
