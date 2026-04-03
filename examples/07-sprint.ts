@@ -1,7 +1,7 @@
 // Example 07: Sprint
 // Primitives: Sprint, BaseAgent
 // Difficulty: Intermediate
-// Estimated cost: ~$0.05
+// Estimated cost: ~$0.27
 //
 // Batch sequential execution: one runner agent processes multiple tasks in order.
 // Sprint expects input as { sprints: [...definitions] } — each definition

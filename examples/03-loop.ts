@@ -1,7 +1,7 @@
 // Example 03: Loop (GAN Pattern)
 // Primitives: Loop, BaseAgent, QAReportSchema
 // Difficulty: Beginner
-// Estimated cost: ~$0.05 (3 rounds max)
+// Estimated cost: ~$0.55 (3 rounds max)
 //
 // Iterative refinement: a writer produces, a critic scores, repeat until quality threshold.
 // This is the GAN pattern — Generator vs Evaluator.

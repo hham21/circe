@@ -1,7 +1,7 @@
 // Example 12: Retry + Resume (Error Recovery & Checkpointing)
 // Primitives: RetryPolicy, Pipeline, EventBus, Pipeline.resume()
 // Difficulty: Advanced
-// Estimated cost: ~$0.05
+// Estimated cost: ~$0.45
 //
 // Part 1: A flaky agent fails twice then succeeds (RetryPolicy handles it).
 // Part 2: Serialize EventBus.history to disk, then use Pipeline.resume(history)

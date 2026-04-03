@@ -1,7 +1,7 @@
 // Example 11: EventBus (Observability & Cost Tracking)
 // Primitives: EventBus, Pipeline, BaseAgent
 // Difficulty: Advanced
-// Estimated cost: ~$0.03
+// Estimated cost: ~$0.18
 //
 // Wire up EventBus listeners to watch real-time execution events.
 // getCostSummary() gives per-agent cost breakdown.

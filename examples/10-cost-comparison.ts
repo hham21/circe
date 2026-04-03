@@ -1,7 +1,7 @@
 // Example 10: Cost Comparison
 // Primitives: Pipeline, Loop, Contract (same task, 3 approaches)
 // Difficulty: Advanced
-// Estimated cost: ~$0.15 total
+// Estimated cost: ~$1.50 total
 //
 // Same task solved 3 different ways. Prints a comparison table.
 // Demonstrates why different orchestration shapes exist — different tradeoffs.

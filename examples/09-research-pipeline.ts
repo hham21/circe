@@ -1,7 +1,7 @@
 // Example 09: Research Pipeline (Multi-Primitive Workflow)
 // Primitives: Parallel + Pipeline + Loop
 // Difficulty: Advanced
-// Estimated cost: ~$0.15
+// Estimated cost: ~$1.50
 //
 // 3 research agents gather info in parallel → synthesizer combines → reviewer refines.
 // Builds on 02-pipeline, 03-loop, and 04-parallel combined.

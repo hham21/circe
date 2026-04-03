@@ -1,7 +1,7 @@
 // Example 06: Compose — Nested Primitives (The Money Shot)
 // Primitives: Pipeline + Contract + Loop (3 primitives composed)
 // Difficulty: Intermediate
-// Estimated cost: ~$0.10
+// Estimated cost: ~$1.00
 //
 // This is what makes Circe different from other frameworks.
 // Pipeline where stage 1 is a Contract (negotiate specs) and stage 2 is a Loop (iterative build).

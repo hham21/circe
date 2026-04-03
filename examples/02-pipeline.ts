@@ -1,7 +1,7 @@
 // Example 02: Pipeline
 // Primitives: Pipeline, BaseAgent
 // Difficulty: Beginner
-// Estimated cost: ~$0.03
+// Estimated cost: ~$0.27
 //
 // Sequential chaining: output of agent A becomes input of agent B.
 // Shows per-step cost breakdown via lastMetrics.

@@ -1,7 +1,7 @@
 // Example 01: Single Agent
 // Primitives: BaseAgent
 // Difficulty: Beginner
-// Estimated cost: ~$0.01
+// Estimated cost: ~$0.09
 //
 // The simplest possible example: create one agent, run it, print the result and cost.
 // This is the "hello world" of Circe.

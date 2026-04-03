@@ -1,7 +1,7 @@
 // Example 08: Code Review (Practical GAN Pattern)
 // Primitives: Loop, BaseAgent, QAReportSchema
 // Difficulty: Intermediate
-// Estimated cost: ~$0.08 (3 rounds max)
+// Estimated cost: ~$0.55 (3 rounds max)
 //
 // Same pattern as 03-loop, but applied to a real engineering task.
 // A code writer generates a function, a code reviewer critiques it, iterate.

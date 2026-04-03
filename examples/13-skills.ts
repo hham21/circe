@@ -1,7 +1,7 @@
 // Example 13: Skills (Prompt Injection & On-Demand Loading)
 // Primitives: SkillRegistry, BaseAgent
 // Difficulty: Advanced
-// Estimated cost: ~$0.05
+// Estimated cost: ~$0.09
 //
 // Create a SKILL.md, register it, inject into agent prompt, agent loads full content on demand.
 // The MCP server is created internally by BaseAgent — no external setup required.

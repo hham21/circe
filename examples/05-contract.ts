@@ -1,7 +1,7 @@
 // Example 05: Contract
 // Primitives: Contract, BaseAgent
 // Difficulty: Intermediate
-// Estimated cost: ~$0.05 (2-3 rounds)
+// Estimated cost: ~$0.55 (2-3 rounds)
 //
 // Adversarial negotiation: proposer and reviewer go back and forth until agreement.
 // Different from Loop (03) — both sides have agency here.

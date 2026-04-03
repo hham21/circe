@@ -16,27 +16,27 @@ npx tsx examples/01-single-agent.ts
 
 ## Estimated Costs
 
-Costs are based on `claude-opus-4-6` default pricing. Actual costs vary by model and response length.
+Costs are based on `claude-opus-4-6` default pricing. Each SDK call includes ~11K input tokens of system overhead, so even simple examples cost ~$0.09 per agent call. Actual costs vary by model and response length.
 
 ## Examples
 
 | # | Example | Primitives | Difficulty | Est. Cost | Description |
 |---|---------|-----------|------------|-----------|-------------|
-| 01 | [single-agent](01-single-agent.ts) | BaseAgent | Beginner | ~$0.01 | Hello world — one agent, one task |
-| 02 | [pipeline](02-pipeline.ts) | Pipeline | Beginner | ~$0.03 | Sequential chaining with per-step cost |
-| 03 | [loop](03-loop.ts) | Loop | Beginner | ~$0.05 | Iterative refinement (GAN pattern) |
-| 04 | [parallel](04-parallel.ts) | Parallel | Intermediate | ~$0.03 | Concurrent execution + partial failure |
-| 05 | [contract](05-contract.ts) | Contract | Intermediate | ~$0.05 | Adversarial negotiation |
-| 06 | [compose](06-compose.ts) | Pipeline+Contract+Loop | Intermediate | ~$0.10 | **Nested primitives — the money shot** |
-| 07 | [sprint](07-sprint.ts) | Sprint | Intermediate | ~$0.05 | Batch sequential execution |
-| 08 | [code-review](08-code-review.ts) | Loop | Intermediate | ~$0.08 | Real-world GAN: code writer ⇄ reviewer |
-| 09 | [research-pipeline](09-research-pipeline.ts) | Parallel+Pipeline+Loop | Advanced | ~$0.15 | Multi-primitive practical workflow |
-| 10 | [cost-comparison](10-cost-comparison.ts) | Pipeline, Loop, Contract | Advanced | ~$0.15 | Same task, 3 approaches compared |
-| 11 | [eventbus](11-eventbus.ts) | EventBus | Advanced | ~$0.03 | Observability and cost tracking |
-| 12 | [retry-resume](12-retry-resume.ts) | RetryPolicy, Pipeline.resume() | Advanced | ~$0.05 | Error recovery + checkpointing |
-| 13 | [skills](13-skills.ts) | SkillRegistry | Advanced | ~$0.05 | Prompt injection + on-demand loading |
+| 01 | [single-agent](01-single-agent.ts) | BaseAgent | Beginner | ~$0.09 | Hello world — one agent, one task |
+| 02 | [pipeline](02-pipeline.ts) | Pipeline | Beginner | ~$0.27 | Sequential chaining with per-step cost |
+| 03 | [loop](03-loop.ts) | Loop | Beginner | ~$0.55 | Iterative refinement (GAN pattern) |
+| 04 | [parallel](04-parallel.ts) | Parallel | Intermediate | ~$0.18 | Concurrent execution + partial failure |
+| 05 | [contract](05-contract.ts) | Contract | Intermediate | ~$0.55 | Adversarial negotiation |
+| 06 | [compose](06-compose.ts) | Pipeline+Contract+Loop | Intermediate | ~$1.00 | **Nested primitives — the money shot** |
+| 07 | [sprint](07-sprint.ts) | Sprint | Intermediate | ~$0.27 | Batch sequential execution |
+| 08 | [code-review](08-code-review.ts) | Loop | Intermediate | ~$0.55 | Real-world GAN: code writer ⇄ reviewer |
+| 09 | [research-pipeline](09-research-pipeline.ts) | Parallel+Pipeline+Loop | Advanced | ~$1.50 | Multi-primitive practical workflow |
+| 10 | [cost-comparison](10-cost-comparison.ts) | Pipeline, Loop, Contract | Advanced | ~$1.50 | Same task, 3 approaches compared |
+| 11 | [eventbus](11-eventbus.ts) | EventBus | Advanced | ~$0.18 | Observability and cost tracking |
+| 12 | [retry-resume](12-retry-resume.ts) | RetryPolicy, Pipeline.resume() | Advanced | ~$0.45 | Error recovery + checkpointing |
+| 13 | [skills](13-skills.ts) | SkillRegistry | Advanced | ~$0.09 | Prompt injection + on-demand loading |
 
-**Total estimated cost to run all examples: ~$0.80**
+**Total estimated cost to run all examples: ~$7**
 
 ## Learning Path
 

@@ -1,7 +1,7 @@
 // Example 04: Parallel
 // Primitives: Parallel, BaseAgent
 // Difficulty: Intermediate
-// Estimated cost: ~$0.03
+// Estimated cost: ~$0.18
 //
 // Three agents run simultaneously on the same input.
 // One agent is deliberately broken to demonstrate partial failure handling (throwOnError: false).
