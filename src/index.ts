@@ -35,6 +35,7 @@ export {
 } from "./orchestration/index.js";
 export { fullstackApp } from "./presets/fullstack.js";
 export { frontendDesign } from "./presets/frontend.js";
+export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
-export { setSkillRegistry, getSkillRegistry } from "./context.js";
+export { setFormatter, setSkillRegistry, getSkillRegistry } from "./context.js";
 export { RunContextSchema, type RunContext, type Runnable } from "./types.js";

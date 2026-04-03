@@ -6,7 +6,11 @@
 // Same pattern as 03-loop, but applied to a real engineering task.
 // A code writer generates a function, a code reviewer critiques it, iterate.
 
-import { BaseAgent, Loop, QAReportSchema, EventBus } from "../src/index.js";
+import { BaseAgent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+// Enable verbose output to see full agent responses
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const coder = new BaseAgent({
   name: "coder",

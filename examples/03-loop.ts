@@ -7,7 +7,11 @@
 // This is the GAN pattern — Generator vs Evaluator.
 // See 05-contract for a different adversarial pattern where both sides negotiate.
 
-import { BaseAgent, Loop, QAReportSchema, EventBus } from "../src/index.js";
+import { BaseAgent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+
+// Enable verbose output to see full agent responses
+const verbose = process.argv.includes("--verbose");
+if (verbose) setFormatter(new OutputFormatter(true));
 
 const writer = new BaseAgent({
   name: "writer",
