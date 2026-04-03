@@ -82,7 +82,7 @@ export interface EventBusOptions {
 
 export class EventBus {
   history: OrchestratorEvent[] = [];
-  private handlers: HandlerEntry[] = [];
+  private handlerMap: Map<string, Array<(event: any) => void>> = new Map();
   private maxCost: number | null;
   private runningCost = 0;
   private perAgentCost: Record<string, number> = {};
@@ -95,7 +95,9 @@ export class EventBus {
     type: T,
     handler: EventHandler<T>,
   ): void {
-    this.handlers.push({ type, handler });
+    const list = this.handlerMap.get(type) ?? [];
+    list.push(handler);
+    this.handlerMap.set(type, list);
   }
 
   emit(event: OrchestratorEvent): void {
@@ -113,10 +115,11 @@ export class EventBus {
       );
     }
 
-    for (const entry of this.handlers) {
-      if (entry.type === event.type) {
+    const handlers = this.handlerMap.get(event.type);
+    if (handlers) {
+      for (const handler of handlers) {
         try {
-          entry.handler(event);
+          handler(event);
         } catch (err) {
           console.error(`[EventBus] handler error for ${event.type}:`, err);
         }

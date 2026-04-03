@@ -1,4 +1,11 @@
+import { join } from "node:path";
 import type { Runnable } from "./types.js";
+
+export function circeHome(): string {
+  return process.env.CIRCE_HOME ?? join(process.env.HOME!, ".circe");
+}
+
+export const PLAYWRIGHT_MCP_SERVER = { command: "npx", args: ["@playwright/mcp@latest"] } as const;
 
 const FENCED_CODE_BLOCK_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/;
 

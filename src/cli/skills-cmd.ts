@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SkillRegistry } from "../tools/skills.js";
+import { circeHome } from "../utils.js";
 
 const SKILL_NAME_COL_WIDTH = 16;
 const SKILL_DESC_COL_WIDTH = 40;
@@ -107,6 +108,6 @@ function localSkillsDir(): string {
 }
 
 function globalSkillsDir(): string {
-  const home = process.env.CIRCE_HOME ?? join(process.env.HOME!, ".circe");
+  const home = circeHome();
   return join(home, "skills");
 }

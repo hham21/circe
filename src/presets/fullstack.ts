@@ -1,8 +1,9 @@
 import { BaseAgent } from "../agent.js";
-import { QAReportSchema } from "../handoff.js";
+import { QAReportSchema, hasQAPassed } from "../handoff.js";
 import { Pipeline } from "../orchestration/pipeline.js";
 import { Loop } from "../orchestration/loop.js";
 import { Contract } from "../orchestration/contract.js";
+import { PLAYWRIGHT_MCP_SERVER } from "../utils.js";
 
 const DEFAULT_MAX_BUILD_ROUNDS = 3;
 const DEFAULT_PASS_THRESHOLD = 7;
@@ -22,12 +23,6 @@ interface FullstackOptions {
   passThreshold?: number;
 }
 
-function hasPassed(result: unknown): boolean {
-  if (result != null && typeof result === "object" && "passed" in result) {
-    return (result as { passed: unknown }).passed === true;
-  }
-  return false;
-}
 
 function formatCriteriaDescription(criteria: Record<string, number>): string {
   return Object.entries(criteria)
@@ -117,7 +112,7 @@ Output JSON:
 }`,
     tools: ["Read", "Bash", "Glob", "Grep"],
     mcpServers: {
-      playwright: { command: "npx", args: ["@playwright/mcp@latest"] },
+      playwright: PLAYWRIGHT_MCP_SERVER,
     },
     outputSchema: QAReportSchema,
   });
@@ -138,7 +133,7 @@ export function fullstackApp(options?: FullstackOptions): Pipeline {
   });
   const buildLoop = new Loop(createGeneratorAgent(), evaluator, {
     maxRounds,
-    stopWhen: hasPassed,
+    stopWhen: hasQAPassed,
   });
 
   return new Pipeline(createPlannerAgent(), contract, buildLoop);

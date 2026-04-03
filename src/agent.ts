@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ZodSchema } from "zod";
 import { getFormatter, getWorkDir, getSkillRegistry } from "./context.js";
 import type { Runnable } from "./types.js";
-import { findJsonString } from "./utils.js";
+import { findJsonString, circeHome } from "./utils.js";
 
 export interface AgentConfig {
   name: string;
@@ -354,7 +354,7 @@ const AgentConfigFileSchema = z.object({
 });
 
 export async function loadAgent(name: string): Promise<BaseAgent> {
-  const home = process.env.CIRCE_HOME ?? `${process.env.HOME}/.circe`;
+  const home = circeHome();
   const agentPath = `${home}/agents/${name}.json`;
   const { readFileSync } = await import("node:fs");
 

@@ -37,6 +37,13 @@ export type ProductSpec = z.infer<typeof ProductSpecSchema>;
 export type BuildResult = z.infer<typeof BuildResultSchema>;
 export type QAReport = z.infer<typeof QAReportSchema>;
 
+export function hasQAPassed(result: unknown): boolean {
+  if (result != null && typeof result === "object" && "passed" in result) {
+    return (result as { passed: unknown }).passed === true;
+  }
+  return false;
+}
+
 function makeParser<T>(schema: { parse: (d: unknown) => T }) {
   return { parse: (d: unknown) => schema.parse(d) };
 }

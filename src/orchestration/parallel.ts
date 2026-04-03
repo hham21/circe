@@ -37,14 +37,14 @@ export class Parallel implements Runnable {
 
   async run(input: unknown): Promise<ParallelResult> {
     const settledOutcomes = await Promise.allSettled(
-      this.agents.map((agent) => this.runAgent(agent, input)),
+      this.agents.map((agent, index) => this.runAgent(agent, input, index)),
     );
 
     return this.collectResults(settledOutcomes);
   }
 
-  private async runAgent(agent: Runnable, input: unknown): Promise<{ name: string; result: unknown }> {
-    const name = agent.name ?? String(agent);
+  private async runAgent(agent: Runnable, input: unknown, index: number): Promise<{ name: string; result: unknown }> {
+    const name = agent.name ?? `agent-${index}`;
     this.eventBus?.emit({ type: "branch:start", branch: name, timestamp: Date.now() });
 
     try {

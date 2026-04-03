@@ -110,7 +110,7 @@ export class OutputFormatter {
   }
 
   private buildResultPreview(result: string): string {
-    const singleLine = result.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+    const singleLine = result.replace(/\s+/g, " ").trim();
     return truncate(singleLine, RESULT_PREVIEW_MAX_LENGTH, "…");
   }
 

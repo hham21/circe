@@ -1,6 +1,7 @@
 import { BaseAgent } from "../agent.js";
-import { QAReportSchema } from "../handoff.js";
+import { QAReportSchema, hasQAPassed } from "../handoff.js";
 import { Loop } from "../orchestration/loop.js";
+import { PLAYWRIGHT_MCP_SERVER } from "../utils.js";
 
 const DEFAULT_ITERATIONS = 10;
 const DEFAULT_PASS_THRESHOLD = 9.5;
@@ -20,7 +21,7 @@ export function frontendDesign(options?: FrontendDesignOptions): Loop {
 
   return new Loop(generator, evaluator, {
     maxRounds: iterations,
-    stopWhen: hasPassedEvaluation,
+    stopWhen: hasQAPassed,
   });
 }
 
@@ -116,15 +117,9 @@ Output JSON:
     tools: ["Bash", "Glob"],
     contextStrategy: "reset",
     mcpServers: {
-      playwright: { command: "npx", args: ["@playwright/mcp@latest"] },
+      playwright: PLAYWRIGHT_MCP_SERVER,
     },
     outputSchema: QAReportSchema,
   });
 }
 
-function hasPassedEvaluation(result: unknown): boolean {
-  if (result != null && typeof result === "object" && "passed" in result) {
-    return (result as { passed: unknown }).passed === true;
-  }
-  return false;
-}

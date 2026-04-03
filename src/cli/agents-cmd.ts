@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { circeHome } from "../utils.js";
 
 const AGENT_FILE_EXTENSION = ".json";
 
@@ -70,7 +71,7 @@ agentsCommand
   });
 
 function resolveAgentsDir(): string {
-  const home = process.env.CIRCE_HOME ?? join(process.env.HOME!, ".circe");
+  const home = circeHome();
   const dir = join(home, "agents");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;

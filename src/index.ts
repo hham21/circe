@@ -19,6 +19,7 @@ export {
   type ProductSpec,
   type BuildResult,
   type QAReport,
+  hasQAPassed,
 } from "./handoff.js";
 export {
   Pipeline,

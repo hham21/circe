@@ -92,17 +92,14 @@ export class Pipeline implements Runnable {
     history: OrchestratorEvent[],
     input: unknown,
   ): { lastCompletedStep: number; lastOutput: unknown } {
-    let lastCompletedStep = -1;
-    let lastOutput: unknown = input;
-
-    for (const event of history) {
-      if (event.type === "step:done" && event.step > lastCompletedStep) {
-        lastCompletedStep = event.step;
-        lastOutput = event.output;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const event = history[i];
+      if (event.type === "step:done") {
+        return { lastCompletedStep: event.step, lastOutput: event.output };
       }
     }
 
-    return { lastCompletedStep, lastOutput };
+    return { lastCompletedStep: -1, lastOutput: input };
   }
 
   private emitPipelineDone(): void {
