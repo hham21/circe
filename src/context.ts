@@ -2,30 +2,30 @@ import type { OutputFormatter } from "./cli/output.js";
 import type { SkillRegistry } from "./tools/skills.js";
 
 // Module-level singletons shared across the agent session
-let activeFormatter: OutputFormatter | null = null;
-let activeWorkDir: string | null = null;
-let activeSkillRegistry: SkillRegistry | null = null;
+let formatter: OutputFormatter | null = null;
+let workDir: string | null = null;
+let skillRegistry: SkillRegistry | null = null;
 
-export function setFormatter(formatter: OutputFormatter | null): void {
-  activeFormatter = formatter;
+export function setFormatter(value: OutputFormatter | null): void {
+  formatter = value;
 }
 
 export function getFormatter(): OutputFormatter | null {
-  return activeFormatter;
+  return formatter;
 }
 
-export function setWorkDir(path: string | null): void {
-  activeWorkDir = path;
+export function setWorkDir(value: string | null): void {
+  workDir = value;
 }
 
 export function getWorkDir(): string | null {
-  return activeWorkDir;
+  return workDir;
 }
 
-export function setSkillRegistry(registry: SkillRegistry | null): void {
-  activeSkillRegistry = registry;
+export function setSkillRegistry(value: SkillRegistry | null): void {
+  skillRegistry = value;
 }
 
 export function getSkillRegistry(): SkillRegistry | null {
-  return activeSkillRegistry;
+  return skillRegistry;
 }

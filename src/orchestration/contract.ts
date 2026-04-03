@@ -4,6 +4,8 @@ import { findJsonString } from "../utils.js";
 import type { EventBus, RetryPolicy } from "../events.js";
 import { executeWithRetry } from "../events.js";
 
+const DEFAULT_MAX_ROUNDS = 3;
+
 export interface ContractOptions {
   maxRounds?: number;
   retryPolicy?: RetryPolicy;
@@ -20,79 +22,83 @@ export class Contract implements Runnable {
   constructor(proposer: Runnable, reviewer: Runnable, options?: ContractOptions) {
     this.proposer = proposer;
     this.reviewer = reviewer;
-    this.maxRounds = options?.maxRounds ?? 3;
+    this.maxRounds = options?.maxRounds ?? DEFAULT_MAX_ROUNDS;
     this.retryPolicy = options?.retryPolicy ?? null;
     this.eventBus = options?.eventBus ?? null;
   }
 
   async run(input: unknown): Promise<unknown> {
     const formatter = getFormatter() as any;
-    let currentInput = input;
-    let review: unknown = null;
+    let proposalInput = input;
+    let review: unknown;
 
-    for (let i = 0; i < this.maxRounds; i++) {
-      if (formatter?.logInfo) {
-        formatter.logInfo(`Contract round ${i + 1}/${this.maxRounds}`);
-      }
+    for (let round = 0; round < this.maxRounds; round++) {
+      formatter?.logInfo?.(`Contract round ${round + 1}/${this.maxRounds}`);
 
-      this.eventBus?.emit({ type: "round:start", round: i, timestamp: Date.now() });
+      this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
       try {
-        const runAgent = async (agent: Runnable, agentInput: unknown) => {
-          if (this.retryPolicy) {
-            return executeWithRetry(
-              () => agent.run(agentInput),
-              this.retryPolicy,
-              (attempt) => {
-                const agentName = (agent as any).name ?? "unknown";
-                this.eventBus?.emit({
-                  type: "retry",
-                  agent: agentName,
-                  attempt,
-                  maxAttempts: this.retryPolicy!.maxRetries,
-                  timestamp: Date.now(),
-                });
-              },
-            );
-          }
-          return agent.run(agentInput);
-        };
-
-        const proposal = await runAgent(this.proposer, currentInput);
-        const proposerCost = (this.proposer as any).lastMetrics?.cost ?? 0;
-        review = this.parseReview(await runAgent(this.reviewer, proposal));
-        const reviewerCost = (this.reviewer as any).lastMetrics?.cost ?? 0;
-        const roundCost = proposerCost + reviewerCost;
-
-        this.eventBus?.emit({
-          type: "round:done",
-          round: i,
-          result: review,
-          cost: roundCost || undefined,
-          timestamp: Date.now(),
-        });
+        review = await this.executeRound(round, proposalInput);
       } catch (err: any) {
         this.eventBus?.emit({
           type: "round:error",
-          round: i,
+          round,
           error: err.message ?? String(err),
           timestamp: Date.now(),
         });
         throw err;
       }
 
-      if (formatter?.logRoundResult) {
-        formatter.logRoundResult(review);
-      }
+      formatter?.logRoundResult?.(review);
 
       if (this.isAccepted(review)) {
         return review;
       }
 
-      currentInput = review;
+      proposalInput = review;
     }
 
     return review;
+  }
+
+  private async executeRound(round: number, proposalInput: unknown): Promise<unknown> {
+    const proposal = await this.runAgentWithRetry(this.proposer, proposalInput);
+    const proposerCost = extractAgentCost(this.proposer);
+
+    const review = this.parseReview(await this.runAgentWithRetry(this.reviewer, proposal));
+    const reviewerCost = extractAgentCost(this.reviewer);
+
+    const roundCost = proposerCost + reviewerCost;
+    this.eventBus?.emit({
+      type: "round:done",
+      round,
+      result: review,
+      cost: roundCost || undefined,
+      timestamp: Date.now(),
+    });
+
+    return review;
+  }
+
+  private async runAgentWithRetry(agent: Runnable, agentInput: unknown): Promise<unknown> {
+    if (!this.retryPolicy) {
+      return agent.run(agentInput);
+    }
+
+    return executeWithRetry(
+      () => agent.run(agentInput),
+      this.retryPolicy,
+      (attempt) => {
+        const agentName = (agent as any).name ?? "unknown";
+        this.eventBus?.emit({
+          type: "retry",
+          agent: agentName,
+          attempt,
+          maxAttempts: this.retryPolicy!.maxRetries,
+          timestamp: Date.now(),
+        });
+      },
+    );
   }
 
   private parseReview(review: unknown): unknown {
@@ -107,11 +113,12 @@ export class Contract implements Runnable {
   }
 
   private isAccepted(review: unknown): boolean {
-    if (review != null && typeof review === "object") {
-      const accepted = (review as any).accepted;
-      if (typeof accepted === "boolean") return accepted;
-    }
-
-    return false;
+    if (review == null || typeof review !== "object") return false;
+    const accepted = (review as any).accepted;
+    return typeof accepted === "boolean" && accepted;
   }
+}
+
+function extractAgentCost(agent: Runnable): number {
+  return (agent as any).lastMetrics?.cost ?? 0;
 }

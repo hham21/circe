@@ -12,6 +12,7 @@ type PresetEntry = {
 };
 
 const PRESETS: Record<string, PresetEntry> = {};
+const SLUG_MAX_LENGTH = 50;
 
 export function registerPreset(name: string, entry: PresetEntry): void {
   PRESETS[name] = entry;
@@ -55,7 +56,7 @@ export function slugify(text: string): string {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 50);
+    .slice(0, SLUG_MAX_LENGTH);
 }
 
 export function resolveInput(input: string): string {
@@ -89,14 +90,16 @@ function initializeContext(workDir: string, verbose?: boolean): OutputFormatter 
   formatter.setLogFile(join(workDir, "circe.log"));
   setFormatter(formatter);
   setWorkDir(workDir);
+  setSkillRegistry(createSkillRegistry(workDir));
+  return formatter;
+}
 
-  const skillRegistry = new SkillRegistry([
+function createSkillRegistry(workDir: string): SkillRegistry {
+  const skillDirs = [
     join(workDir, ".circe", "skills"),
     join(process.env.HOME!, ".circe", "skills"),
-  ]);
-  setSkillRegistry(skillRegistry);
-
-  return formatter;
+  ];
+  return new SkillRegistry(skillDirs);
 }
 
 function teardownContext(): void {

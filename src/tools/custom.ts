@@ -1,5 +1,5 @@
 export interface CirceToolFn extends Function {
-  _circeTool: boolean;
+  _circeTool: true;
   _circeToolName: string;
 }
 

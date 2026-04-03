@@ -1,25 +1,6 @@
 import type { Runnable } from "./types.js";
 
-function extractBalancedBraces(text: string, start: number): string | null {
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (escape) { escape = false; continue; }
-    if (ch === "\\") { escape = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === "{") depth++;
-    if (ch === "}") {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-
-  return null;
-}
+const FENCED_CODE_BLOCK_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/;
 
 /**
  * Extract the first JSON string from text.
@@ -27,7 +8,7 @@ function extractBalancedBraces(text: string, start: number): string | null {
  * Returns the raw JSON string (not parsed).
  */
 export function findJsonString(text: string): string | null {
-  const codeBlockMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+  const codeBlockMatch = text.match(FENCED_CODE_BLOCK_PATTERN);
   if (codeBlockMatch) {
     return codeBlockMatch[1].trim();
   }
@@ -41,8 +22,25 @@ export function findJsonString(text: string): string | null {
   return null;
 }
 
-function isRunnable(value: unknown): value is Runnable {
-  return value != null && typeof value === "object" && "run" in value;
+function extractBalancedBraces(text: string, start: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (escape) { escape = false; continue; }
+    if (char === "\\") { escape = true; continue; }
+    if (char === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (char === "{") depth++;
+    if (char === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -65,4 +63,8 @@ export function parseTrailingOptions<T>(
   }
 
   return { agents: args as Runnable[], options: {} as T };
+}
+
+function isRunnable(value: unknown): value is Runnable {
+  return value != null && typeof value === "object" && "run" in value;
 }

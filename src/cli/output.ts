@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { appendFileSync, writeFileSync } from "node:fs";
 
-const COLORS: Record<string, (s: string) => string> = {
+const AGENT_COLORS: Record<string, (s: string) => string> = {
   planner: chalk.cyan,
   generator: chalk.yellow,
   evaluator: chalk.red,
@@ -12,9 +12,18 @@ const COLORS: Record<string, (s: string) => string> = {
   default: chalk.blue,
 };
 
-function formatTokens(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+const AGENT_LABEL_WIDTH = 14;
+const RESULT_PREVIEW_MAX_LENGTH = 50;
+const FEEDBACK_PREVIEW_MAX_LENGTH = 60;
+const TOKEN_COMPACT_THRESHOLD = 1000;
+
+function formatTokenCount(n: number): string {
+  if (n >= TOKEN_COMPACT_THRESHOLD) return `${(n / TOKEN_COMPACT_THRESHOLD).toFixed(1)}k`;
   return String(n);
+}
+
+function truncate(text: string, maxLength: number, ellipsis: string): string {
+  return text.length > maxLength ? text.slice(0, maxLength) + ellipsis : text;
 }
 
 export class OutputFormatter {
@@ -45,16 +54,11 @@ export class OutputFormatter {
     cost?: number | null,
   ): void {
     const label = this.agentLabel(name);
+    const preview = this.buildResultPreview(result);
+    const metaParts = this.buildMetaParts(tokens, cost);
 
-    const oneLine = result.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
-    const preview = oneLine.length > 50 ? oneLine.slice(0, 50) + "…" : oneLine;
-
-    const meta: string[] = [];
-    if (tokens) meta.push(chalk.gray(`${formatTokens(tokens[0])}/${formatTokens(tokens[1])}`));
-    if (cost != null) meta.push(chalk.yellow(`$${cost.toFixed(4)}`));
-
-    console.log(`${label}  ${chalk.white(preview)}  ${meta.join("  ")}`);
-    this.writeLog(`[${name}] ${oneLine} | ${tokens?.[0]}/${tokens?.[1]} | $${cost?.toFixed(4)}`);
+    console.log(`${label}  ${chalk.white(preview)}  ${metaParts.join("  ")}`);
+    this.writeLog(`[${name}] ${preview} | ${tokens?.[0]}/${tokens?.[1]} | $${cost?.toFixed(4)}`);
   }
 
   logInfo(message: string): void {
@@ -78,29 +82,12 @@ export class OutputFormatter {
     if (result == null || typeof result !== "object") return;
     const r = result as Record<string, unknown>;
 
-    const parts: string[] = [];
-    if ("passed" in r) {
-      parts.push(r.passed ? chalk.green("PASS") : chalk.red("FAIL"));
-    }
-    if ("accepted" in r) {
-      parts.push(r.accepted ? chalk.green("ACCEPTED") : chalk.red("REJECTED"));
-    }
-    if ("scores" in r && typeof r.scores === "object" && r.scores) {
-      const scores = Object.entries(r.scores as Record<string, number>)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(", ");
-      parts.push(chalk.gray(scores));
-    }
-    if ("feedback" in r && Array.isArray(r.feedback) && r.feedback.length > 0) {
-      const first = String(r.feedback[0]);
-      const preview = first.length > 60 ? first.slice(0, 60) + "..." : first;
-      parts.push(chalk.dim(preview));
-    }
+    const roundParts = this.buildRoundResultParts(r);
+    if (roundParts.length === 0) return;
 
-    if (parts.length > 0) {
-      console.log(`  → ${parts.join("  ")}`);
-      this.writeLog(`  → ${parts.join("  ")}`);
-    }
+    const line = `  → ${roundParts.join("  ")}`;
+    console.log(line);
+    this.writeLog(line);
   }
 
   finalSummary(outputDir: string, totalDuration: number): void {
@@ -122,9 +109,48 @@ export class OutputFormatter {
     return parts.join(" ");
   }
 
+  private buildResultPreview(result: string): string {
+    const singleLine = result.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+    return truncate(singleLine, RESULT_PREVIEW_MAX_LENGTH, "…");
+  }
+
+  private buildMetaParts(tokens?: [number, number] | null, cost?: number | null): string[] {
+    const parts: string[] = [];
+    if (tokens) {
+      parts.push(chalk.gray(`${formatTokenCount(tokens[0])}/${formatTokenCount(tokens[1])}`));
+    }
+    if (cost != null) {
+      parts.push(chalk.yellow(`$${cost.toFixed(4)}`));
+    }
+    return parts;
+  }
+
+  private buildRoundResultParts(r: Record<string, unknown>): string[] {
+    const parts: string[] = [];
+
+    if ("passed" in r) {
+      parts.push(r.passed ? chalk.green("PASS") : chalk.red("FAIL"));
+    }
+    if ("accepted" in r) {
+      parts.push(r.accepted ? chalk.green("ACCEPTED") : chalk.red("REJECTED"));
+    }
+    if ("scores" in r && typeof r.scores === "object" && r.scores) {
+      const scores = Object.entries(r.scores as Record<string, number>)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ");
+      parts.push(chalk.gray(scores));
+    }
+    if ("feedback" in r && Array.isArray(r.feedback) && r.feedback.length > 0) {
+      const firstFeedback = String(r.feedback[0]);
+      parts.push(chalk.dim(truncate(firstFeedback, FEEDBACK_PREVIEW_MAX_LENGTH, "...")));
+    }
+
+    return parts;
+  }
+
   private agentLabel(name: string): string {
-    const colorFn = COLORS[name] ?? COLORS.default;
-    return colorFn(`[${name}]`.padEnd(14));
+    const colorFn = AGENT_COLORS[name] ?? AGENT_COLORS.default;
+    return colorFn(`[${name}]`.padEnd(AGENT_LABEL_WIDTH));
   }
 
   private writeLog(text: string): void {

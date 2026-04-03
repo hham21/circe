@@ -29,62 +29,89 @@ export class Pipeline implements Runnable {
     let result = input;
 
     for (let i = 0; i < this.agents.length; i++) {
-      const agent = this.agents[i];
-      const agentName = (agent as any).name ?? `step-${i}`;
-
-      this.eventBus?.emit({ type: "step:start", step: i, agent: agentName, timestamp: Date.now() });
-
-      try {
-        if (this.retryPolicy) {
-          const capturedResult = result;
-          result = await executeWithRetry(
-            () => agent.run(capturedResult),
-            this.retryPolicy,
-            (attempt, error) => {
-              this.eventBus?.emit({
-                type: "retry",
-                agent: agentName,
-                attempt,
-                maxAttempts: this.retryPolicy!.maxRetries,
-                timestamp: Date.now(),
-              });
-            },
-          );
-        } else {
-          result = await agent.run(result);
-        }
-
-        const metrics = (agent as any).lastMetrics;
-        this.eventBus?.emit({
-          type: "step:done",
-          step: i,
-          agent: agentName,
-          output: result,
-          cost: metrics?.cost,
-          tokens: metrics ? [metrics.inputTokens, metrics.outputTokens] : undefined,
-          timestamp: Date.now(),
-        });
-      } catch (err: any) {
-        this.eventBus?.emit({
-          type: "step:error",
-          step: i,
-          agent: agentName,
-          error: err.message ?? String(err),
-          timestamp: Date.now(),
-        });
-        throw err;
-      }
+      result = await this.runStep(this.agents[i], i, result);
     }
 
-    const summary = this.eventBus?.getCostSummary();
-    if (this.eventBus && summary) {
-      this.eventBus.emit({ type: "pipeline:done", totalCost: summary.total, timestamp: Date.now() });
-    }
+    this.emitPipelineDone();
 
     return result;
   }
 
   resume(history: OrchestratorEvent[], input: unknown): Promise<unknown> {
+    const { lastCompletedStep, lastOutput } = this.findLastCompletedStep(history, input);
+
+    if (lastCompletedStep < 0) {
+      return this.run(input);
+    }
+
+    const remainingAgents = this.agents.slice(lastCompletedStep + 1);
+    if (remainingAgents.length === 0) {
+      return Promise.resolve(lastOutput);
+    }
+
+    const resumePipeline = new Pipeline(...remainingAgents, {
+      retryPolicy: this.retryPolicy ?? undefined,
+      eventBus: this.eventBus ?? undefined,
+    });
+    return resumePipeline.run(lastOutput);
+  }
+
+  private async runStep(agent: Runnable, stepIndex: number, input: unknown): Promise<unknown> {
+    const agentName = (agent as any).name ?? `step-${stepIndex}`;
+
+    this.eventBus?.emit({ type: "step:start", step: stepIndex, agent: agentName, timestamp: Date.now() });
+
+    try {
+      const output = await this.executeAgent(agent, agentName, input);
+
+      const metrics = (agent as any).lastMetrics;
+      this.eventBus?.emit({
+        type: "step:done",
+        step: stepIndex,
+        agent: agentName,
+        output,
+        cost: metrics?.cost,
+        tokens: metrics ? [metrics.inputTokens, metrics.outputTokens] : undefined,
+        timestamp: Date.now(),
+      });
+
+      return output;
+    } catch (err: any) {
+      this.eventBus?.emit({
+        type: "step:error",
+        step: stepIndex,
+        agent: agentName,
+        error: err.message ?? String(err),
+        timestamp: Date.now(),
+      });
+      throw err;
+    }
+  }
+
+  private async executeAgent(agent: Runnable, agentName: string, input: unknown): Promise<unknown> {
+    if (!this.retryPolicy) {
+      return agent.run(input);
+    }
+
+    return executeWithRetry(
+      () => agent.run(input),
+      this.retryPolicy,
+      (attempt) => {
+        this.eventBus?.emit({
+          type: "retry",
+          agent: agentName,
+          attempt,
+          maxAttempts: this.retryPolicy!.maxRetries,
+          timestamp: Date.now(),
+        });
+      },
+    );
+  }
+
+  private findLastCompletedStep(
+    history: OrchestratorEvent[],
+    input: unknown,
+  ): { lastCompletedStep: number; lastOutput: unknown } {
     let lastCompletedStep = -1;
     let lastOutput: unknown = input;
 
@@ -95,19 +122,13 @@ export class Pipeline implements Runnable {
       }
     }
 
-    if (lastCompletedStep < 0) {
-      return this.run(input);
-    }
+    return { lastCompletedStep, lastOutput };
+  }
 
-    const remaining = this.agents.slice(lastCompletedStep + 1);
-    if (remaining.length === 0) {
-      return Promise.resolve(lastOutput);
+  private emitPipelineDone(): void {
+    const summary = this.eventBus?.getCostSummary();
+    if (this.eventBus && summary) {
+      this.eventBus.emit({ type: "pipeline:done", totalCost: summary.total, timestamp: Date.now() });
     }
-
-    const resumePipeline = new Pipeline(...remaining, {
-      retryPolicy: this.retryPolicy ?? undefined,
-      eventBus: this.eventBus ?? undefined,
-    });
-    return resumePipeline.run(lastOutput);
   }
 }

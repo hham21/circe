@@ -37,8 +37,12 @@ export type ProductSpec = z.infer<typeof ProductSpecSchema>;
 export type BuildResult = z.infer<typeof BuildResultSchema>;
 export type QAReport = z.infer<typeof QAReportSchema>;
 
-export const Feature = { parse: (d: unknown) => FeatureSchema.parse(d) };
-export const TechStack = { parse: (d: unknown) => TechStackSchema.parse(d) };
-export const ProductSpec = { parse: (d: unknown) => ProductSpecSchema.parse(d) };
-export const BuildResult = { parse: (d: unknown) => BuildResultSchema.parse(d) };
-export const QAReport = { parse: (d: unknown) => QAReportSchema.parse(d) };
+function makeParser<T>(schema: { parse: (d: unknown) => T }) {
+  return { parse: (d: unknown) => schema.parse(d) };
+}
+
+export const Feature = makeParser(FeatureSchema);
+export const TechStack = makeParser(TechStackSchema);
+export const ProductSpec = makeParser(ProductSpecSchema);
+export const BuildResult = makeParser(BuildResultSchema);
+export const QAReport = makeParser(QAReportSchema);

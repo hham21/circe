@@ -18,7 +18,15 @@ export type OrchestratorEvent =
       timestamp: number;
     }
   | { type: "step:start"; step: number; agent: string; timestamp: number }
-  | { type: "step:done"; step: number; agent: string; output: unknown; /** USD */ cost?: number; tokens?: [number, number]; timestamp: number }
+  | {
+      type: "step:done";
+      step: number;
+      agent: string;
+      output: unknown;
+      /** USD */ cost?: number;
+      tokens?: [number, number];
+      timestamp: number;
+    }
   | { type: "step:error"; step: number; agent: string; error: string; timestamp: number }
   | { type: "round:start"; round: number; timestamp: number }
   | { type: "round:done"; round: number; result: unknown; /** USD */ cost?: number; timestamp: number }
@@ -39,6 +47,27 @@ type EventHandler<T extends OrchestratorEvent["type"]> = (
 interface HandlerEntry {
   type: string;
   handler: (event: any) => void;
+}
+
+interface CostEntry {
+  cost: number;
+  agent: string;
+}
+
+function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
+  if (event.type === "agent:done") {
+    return { cost: event.cost, agent: event.agent };
+  }
+  if (event.type === "agent:error" && event.cost != null) {
+    return { cost: event.cost, agent: event.agent };
+  }
+  if (event.type === "step:done" && event.cost != null) {
+    return { cost: event.cost, agent: event.agent };
+  }
+  if (event.type === "branch:done" && event.cost != null) {
+    return { cost: event.cost, agent: event.branch };
+  }
+  return null;
 }
 
 export class EventBus {
@@ -70,27 +99,11 @@ export class EventBus {
     const perAgent: Record<string, number> = {};
 
     for (const event of this.history) {
-      let cost: number | undefined;
-      let agent: string | undefined;
+      const entry = extractCostEntry(event);
+      if (entry == null) continue;
 
-      if (event.type === "agent:done") {
-        cost = event.cost;
-        agent = event.agent;
-      } else if (event.type === "agent:error" && event.cost != null) {
-        cost = event.cost;
-        agent = event.agent;
-      } else if (event.type === "step:done" && event.cost != null) {
-        cost = event.cost;
-        agent = event.agent;
-      } else if (event.type === "branch:done" && event.cost != null) {
-        cost = event.cost;
-        agent = event.branch;
-      }
-
-      if (cost != null && agent != null) {
-        total += cost;
-        perAgent[agent] = (perAgent[agent] ?? 0) + cost;
-      }
+      total += entry.cost;
+      perAgent[entry.agent] = (perAgent[entry.agent] ?? 0) + entry.cost;
     }
 
     return { total, perAgent };
@@ -119,10 +132,15 @@ export function defaultShouldRetry(error: Error): boolean {
   return !NON_RETRYABLE_PATTERNS.some((p) => p.test(msg));
 }
 
+const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 60_000;
 
 export function defaultBackoff(attempt: number): number {
-  return Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
+  return Math.min(BASE_BACKOFF_MS * 2 ** attempt, MAX_BACKOFF_MS);
+}
+
+function toError(err: unknown): Error {
+  return err instanceof Error ? err : new Error(String(err));
 }
 
 export async function executeWithRetry<T>(
@@ -137,8 +155,8 @@ export async function executeWithRetry<T>(
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
     try {
       return await fn();
-    } catch (err: any) {
-      lastError = err instanceof Error ? err : new Error(String(err));
+    } catch (err) {
+      lastError = toError(err);
 
       if (attempt >= policy.maxRetries || !shouldRetry(lastError)) {
         throw lastError;

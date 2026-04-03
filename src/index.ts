@@ -21,9 +21,17 @@ export {
   type QAReport,
 } from "./handoff.js";
 export {
-  Pipeline, Loop, Parallel, Contract, Sprint,
-  type PipelineOptions, type LoopOptions, type ParallelOptions, type ParallelResult,
-  type ContractOptions, type SprintOptions,
+  Pipeline,
+  Loop,
+  Parallel,
+  Contract,
+  Sprint,
+  type PipelineOptions,
+  type LoopOptions,
+  type ParallelOptions,
+  type ParallelResult,
+  type ContractOptions,
+  type SprintOptions,
 } from "./orchestration/index.js";
 export { fullstackApp } from "./presets/fullstack.js";
 export { frontendDesign } from "./presets/frontend.js";

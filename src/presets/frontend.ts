@@ -2,24 +2,30 @@ import { BaseAgent } from "../agent.js";
 import { QAReportSchema } from "../handoff.js";
 import { Loop } from "../orchestration/loop.js";
 
+const DEFAULT_ITERATIONS = 10;
+const DEFAULT_PASS_THRESHOLD = 9.5;
+
 interface FrontendDesignOptions {
   model?: string;
   iterations?: number;
   passThreshold?: number;
 }
 
-function isPassed(result: unknown): boolean {
-  if (result != null && typeof result === "object" && "passed" in result) {
-    return (result as any).passed === true;
-  }
-  return false;
+export function frontendDesign(options?: FrontendDesignOptions): Loop {
+  const iterations = options?.iterations ?? DEFAULT_ITERATIONS;
+  const passThreshold = options?.passThreshold ?? DEFAULT_PASS_THRESHOLD;
+
+  const generator = createGenerator(passThreshold);
+  const evaluator = createEvaluator(passThreshold);
+
+  return new Loop(generator, evaluator, {
+    maxRounds: iterations,
+    stopWhen: hasPassedEvaluation,
+  });
 }
 
-export function frontendDesign(options?: FrontendDesignOptions): Loop {
-  const iterations = options?.iterations ?? 10;
-  const passThreshold = options?.passThreshold ?? 9.5;
-
-  const generator = new BaseAgent({
+function createGenerator(passThreshold: number): BaseAgent {
+  return new BaseAgent({
     name: "generator",
     prompt: `You are an elite frontend craftsperson. Build pure HTML/CSS/JS (no frameworks).
 
@@ -50,8 +56,10 @@ Images:
 
 Target: ALL criteria must score ${passThreshold}/10 or higher.`,
   });
+}
 
-  const evaluator = new BaseAgent({
+function createEvaluator(passThreshold: number): BaseAgent {
+  return new BaseAgent({
     name: "evaluator",
     prompt: `You are a ruthless design critic with no memory of previous rounds. Load the design-critique skill via use_skill("design-critique") for detailed methodology, anti-patterns, and scoring guide.
 
@@ -112,9 +120,11 @@ Output JSON:
     },
     outputSchema: QAReportSchema,
   });
+}
 
-  return new Loop(generator, evaluator, {
-    maxRounds: iterations,
-    stopWhen: isPassed,
-  });
+function hasPassedEvaluation(result: unknown): boolean {
+  if (result != null && typeof result === "object" && "passed" in result) {
+    return (result as { passed: unknown }).passed === true;
+  }
+  return false;
 }

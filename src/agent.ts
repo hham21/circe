@@ -27,6 +27,9 @@ export interface ResultMetrics {
 
 const INPUT_COST_PER_M = 15;
 const OUTPUT_COST_PER_M = 75;
+const BYPASS_PERMISSIONS_MODE = "bypassPermissions";
+const SKILL_SERVER_NAME = "circe-skills";
+const INPUT_PREVIEW_MAX_LENGTH = 80;
 
 export class BaseAgent implements Runnable {
   name: string;
@@ -53,13 +56,13 @@ export class BaseAgent implements Runnable {
     this.skills = config.skills ?? [];
     this.mcpServers = config.mcpServers ?? {};
     this.contextStrategy = config.contextStrategy ?? "compaction";
-    this.permissionMode = config.permissionMode ?? "bypassPermissions";
+    this.permissionMode = config.permissionMode ?? BYPASS_PERMISSIONS_MODE;
     this.continueSession = config.continueSession ?? false;
     this.inputSchema = config.inputSchema ?? null;
     this.outputSchema = config.outputSchema ?? null;
   }
 
-  // --- Public API ---
+  // --- Public methods ---
 
   buildSystemPrompt(): string {
     const registry = getSkillRegistry();
@@ -133,7 +136,7 @@ export class BaseAgent implements Runnable {
     return (inputTokens * INPUT_COST_PER_M + outputTokens * OUTPUT_COST_PER_M) / 1_000_000;
   }
 
-  // --- run() helpers ---
+  // --- run() implementation details ---
 
   private validateInput(input: unknown): void {
     if (!this.inputSchema) return;
@@ -141,12 +144,16 @@ export class BaseAgent implements Runnable {
     const result = this.inputSchema.safeParse(input);
     if (result.success) return;
 
-    const received =
-      typeof input === "string"
-        ? `string: "${input.slice(0, 80)}${input.length > 80 ? "…" : ""}"`
-        : typeof input;
+    const received = this.describeInputForError(input);
     const issues = result.error.issues.map((i: any) => i.message).join(", ");
     throw new Error(`[${this.name}] input validation failed — ${issues} (received ${received})`);
+  }
+
+  private describeInputForError(input: unknown): string {
+    if (typeof input !== "string") return typeof input;
+    const preview = input.slice(0, INPUT_PREVIEW_MAX_LENGTH);
+    const truncated = input.length > INPUT_PREVIEW_MAX_LENGTH ? "…" : "";
+    return `string: "${preview}${truncated}"`;
   }
 
   private validateSkills(): void {
@@ -181,18 +188,20 @@ export class BaseAgent implements Runnable {
     const resultText =
       typeof message.result === "string" ? message.result : JSON.stringify(message.result);
 
-    let inputTokens = 0;
-    let outputTokens = 0;
-    if (message.usage) {
-      inputTokens =
-        (message.usage.input_tokens ?? 0) +
-        (message.usage.cache_creation_input_tokens ?? 0) +
-        (message.usage.cache_read_input_tokens ?? 0);
-      outputTokens = message.usage.output_tokens ?? 0;
-    }
-
+    const { inputTokens, outputTokens } = this.extractTokenCounts(message.usage);
     const cost = message.total_cost_usd ?? this.estimateCost(inputTokens, outputTokens);
     return { resultText, cost, inputTokens, outputTokens };
+  }
+
+  private extractTokenCounts(usage: any): { inputTokens: number; outputTokens: number } {
+    if (!usage) return { inputTokens: 0, outputTokens: 0 };
+
+    const inputTokens =
+      (usage.input_tokens ?? 0) +
+      (usage.cache_creation_input_tokens ?? 0) +
+      (usage.cache_read_input_tokens ?? 0);
+    const outputTokens = usage.output_tokens ?? 0;
+    return { inputTokens, outputTokens };
   }
 
   private finalize(metrics: ResultMetrics, formatter: any): unknown {
@@ -201,8 +210,8 @@ export class BaseAgent implements Runnable {
     const parsed = this.parseResult(resultText);
 
     if (formatter?.agentDone) {
-      const display = typeof parsed === "string" ? this.stripCodeBlock(parsed) : JSON.stringify(parsed);
-      formatter.agentDone(this.name, display, [inputTokens, outputTokens], cost);
+      const formattedOutput = typeof parsed === "string" ? this.stripCodeBlock(parsed) : JSON.stringify(parsed);
+      formatter.agentDone(this.name, formattedOutput, [inputTokens, outputTokens], cost);
     }
 
     return parsed;
@@ -216,7 +225,7 @@ export class BaseAgent implements Runnable {
       permissionMode: this.permissionMode,
     };
 
-    if (this.permissionMode === "bypassPermissions") {
+    if (this.permissionMode === BYPASS_PERMISSIONS_MODE) {
       options.allowDangerouslySkipPermissions = true;
     }
     if (this.tools) {
@@ -235,7 +244,7 @@ export class BaseAgent implements Runnable {
     const skillServer = this.skills.length > 0 ? this.buildSkillMcpServer() : null;
     if (skillServer) {
       const existingServers = (options.mcpServers as Record<string, unknown>) ?? {};
-      options.mcpServers = { ...existingServers, "circe-skills": skillServer };
+      options.mcpServers = { ...existingServers, [SKILL_SERVER_NAME]: skillServer };
     }
 
     return options;
@@ -246,28 +255,31 @@ export class BaseAgent implements Runnable {
     if (!registry) return null;
 
     return createSdkMcpServer({
-      name: "circe-skills",
+      name: SKILL_SERVER_NAME,
       tools: [
         sdkTool(
           "use_skill",
           "Load a skill's full content by name. Use this to access detailed methodology.",
           { name: z.string().describe("Name of the skill to load") },
-          async (args) => {
-            const content = registry.getSkill(args.name);
-            if (content) {
-              console.error(`[skill] Loaded: ${args.name}`);
-              return { content: [{ type: "text" as const, text: content }] };
-            }
-            console.error(`[skill] Not found: ${args.name}`);
-            return {
-              content: [
-                { type: "text" as const, text: `Skill '${args.name}' not found. Continuing without it.` },
-              ],
-            };
-          }
+          async (args) => this.loadSkillContent(registry, args.name)
         ),
       ],
     });
+  }
+
+  private loadSkillContent(
+    registry: NonNullable<ReturnType<typeof getSkillRegistry>>,
+    skillName: string
+  ): { content: Array<{ type: "text"; text: string }> } {
+    const content = registry.getSkill(skillName);
+    if (content) {
+      console.error(`[skill] Loaded: ${skillName}`);
+      return { content: [{ type: "text" as const, text: content }] };
+    }
+    console.error(`[skill] Not found: ${skillName}`);
+    return {
+      content: [{ type: "text" as const, text: `Skill '${skillName}' not found. Continuing without it.` }],
+    };
   }
 
   // --- Output formatting helpers ---
@@ -296,6 +308,6 @@ export async function loadAgent(name: string): Promise<BaseAgent> {
   const home = process.env.CIRCE_HOME ?? `${process.env.HOME}/.circe`;
   const agentPath = `${home}/agents/${name}.json`;
   const { readFileSync } = await import("node:fs");
-  const data = JSON.parse(readFileSync(agentPath, "utf-8"));
-  return new BaseAgent(data);
+  const agentConfig = JSON.parse(readFileSync(agentPath, "utf-8"));
+  return new BaseAgent(agentConfig);
 }

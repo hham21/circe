@@ -2,6 +2,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
+const SESSION_ID_LENGTH = 8;
+const FILE_ENCODING = "utf-8" as const;
+
 export interface Session {
   id: string;
   workflow: string;
@@ -12,19 +15,19 @@ export interface Session {
 }
 
 export class SessionManager {
-  private dir: string;
+  private sessionsDir: string;
 
   constructor(baseDir: string) {
-    this.dir = join(baseDir, "sessions");
-    if (!existsSync(this.dir)) {
-      mkdirSync(this.dir, { recursive: true });
+    this.sessionsDir = join(baseDir, "sessions");
+    if (!existsSync(this.sessionsDir)) {
+      mkdirSync(this.sessionsDir, { recursive: true });
     }
   }
 
   create(workflow: string, input: string): Session {
     const now = new Date().toISOString();
     const session: Session = {
-      id: randomUUID().slice(0, 8),
+      id: randomUUID().slice(0, SESSION_ID_LENGTH),
       workflow,
       input,
       status: "running",
@@ -36,19 +39,18 @@ export class SessionManager {
   }
 
   list(): Session[] {
-    if (!existsSync(this.dir)) return [];
-    const files = readdirSync(this.dir).filter((f) => f.endsWith(".json"));
-    return files
-      .map((f) => JSON.parse(readFileSync(join(this.dir, f), "utf-8")) as Session)
+    const filenames = readdirSync(this.sessionsDir).filter((f) => f.endsWith(".json"));
+    return filenames
+      .map((filename) => this.readSessionFile(filename))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   get(sessionId: string): Session {
-    const path = join(this.dir, `${sessionId}.json`);
-    if (!existsSync(path)) {
+    const filePath = this.sessionFilePath(sessionId);
+    if (!existsSync(filePath)) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    return JSON.parse(readFileSync(path, "utf-8"));
+    return JSON.parse(readFileSync(filePath, FILE_ENCODING));
   }
 
   updateStatus(sessionId: string, status: string): void {
@@ -58,9 +60,17 @@ export class SessionManager {
     this.save(session);
   }
 
+  private sessionFilePath(sessionId: string): string {
+    return join(this.sessionsDir, `${sessionId}.json`);
+  }
+
+  private readSessionFile(filename: string): Session {
+    return JSON.parse(readFileSync(join(this.sessionsDir, filename), FILE_ENCODING)) as Session;
+  }
+
   private save(session: Session): void {
     writeFileSync(
-      join(this.dir, `${session.id}.json`),
+      this.sessionFilePath(session.id),
       JSON.stringify(session, null, 2),
     );
   }

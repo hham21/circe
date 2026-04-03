@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SkillRegistry } from "../tools/skills.js";
 
+const SKILL_NAME_COL_WIDTH = 16;
+const SKILL_DESC_COL_WIDTH = 40;
+
 export const skillsCommand = new Command("skills").description("Manage skills");
 
 skillsCommand
@@ -18,7 +21,7 @@ skillsCommand
     console.log("Skills:");
     for (const skill of skills) {
       const scope = resolveSkillScope(skill.source);
-      console.log(`  ${skill.name.padEnd(16)} ${skill.description.padEnd(40)} (${scope})`);
+      console.log(`  ${skill.name.padEnd(SKILL_NAME_COL_WIDTH)} ${skill.description.padEnd(SKILL_DESC_COL_WIDTH)} (${scope})`);
     }
   });
 
@@ -32,13 +35,7 @@ skillsCommand
       console.error(`Skill '${name}' not found.`);
       process.exit(1);
     }
-    const scope = resolveSkillScope(info.source);
-    console.log(`Name:        ${info.name}`);
-    console.log(`Description: ${info.description}`);
-    console.log(`Source:      ${info.source} (${scope})`);
-    console.log(`---`);
-    const content = registry.getSkill(name);
-    if (content) console.log(content);
+    printSkillInfo(info, registry.getSkill(name));
   });
 
 skillsCommand
@@ -46,7 +43,7 @@ skillsCommand
   .description("Create a new skill from template")
   .option("--global", "Create in global skills directory")
   .action((name: string, options: { global?: boolean }) => {
-    const baseDir = options.global ? globalSkillsDir() : localSkillsDir();
+    const baseDir = resolveBaseDir(options.global);
     const skillDir = join(baseDir, name);
     const skillFile = join(skillDir, "SKILL.md");
 
@@ -65,7 +62,7 @@ skillsCommand
   .description("Delete a skill")
   .option("--global", "Delete from global skills directory")
   .action((name: string, options: { global?: boolean }) => {
-    const baseDir = options.global ? globalSkillsDir() : localSkillsDir();
+    const baseDir = resolveBaseDir(options.global);
     const skillDir = join(baseDir, name);
 
     if (!existsSync(skillDir)) {
@@ -81,8 +78,24 @@ function createRegistry(): SkillRegistry {
   return new SkillRegistry([localSkillsDir(), globalSkillsDir()]);
 }
 
+function resolveBaseDir(isGlobal: boolean | undefined): string {
+  return isGlobal ? globalSkillsDir() : localSkillsDir();
+}
+
 function resolveSkillScope(sourceDir: string): "local" | "global" {
   return sourceDir === localSkillsDir() ? "local" : "global";
+}
+
+function printSkillInfo(
+  info: { name: string; description: string; source: string },
+  content: string | null | undefined
+): void {
+  const scope = resolveSkillScope(info.source);
+  console.log(`Name:        ${info.name}`);
+  console.log(`Description: ${info.description}`);
+  console.log(`Source:      ${info.source} (${scope})`);
+  console.log(`---`);
+  if (content) console.log(content);
 }
 
 function buildSkillTemplate(name: string): string {

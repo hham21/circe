@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+const SKILL_FILENAME = "SKILL.md";
+
 export interface SkillInfo {
   name: string;
   description: string;
@@ -15,23 +17,11 @@ export class SkillRegistry {
   }
 
   listSkills(): SkillInfo[] {
-    const seenSkillNames = new Set<string>();
+    const visitedNames = new Set<string>();
     const skills: SkillInfo[] = [];
 
     for (const dir of this.dirs) {
-      if (!existsSync(dir)) continue;
-
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        if (seenSkillNames.has(entry.name)) continue;
-
-        const skill = this.readSkillInfoFromDir(dir, entry.name);
-        if (skill) {
-          seenSkillNames.add(entry.name);
-          skills.push(skill);
-        }
-      }
+      this.collectSkillsFromDir(dir, visitedNames, skills);
     }
 
     return skills;
@@ -71,8 +61,24 @@ export class SkillRegistry {
     return `Available skills (call mcp__circe-skills__use_skill to load full methodology):\n${summaryLines.join("\n")}`;
   }
 
+  private collectSkillsFromDir(dir: string, visitedNames: Set<string>, skills: SkillInfo[]): void {
+    if (!existsSync(dir)) return;
+
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (visitedNames.has(entry.name)) continue;
+
+      const skill = this.readSkillInfoFromDir(dir, entry.name);
+      if (skill) {
+        visitedNames.add(entry.name);
+        skills.push(skill);
+      }
+    }
+  }
+
   private buildSkillFilePath(dir: string, skillName: string): string {
-    return join(dir, skillName, "SKILL.md");
+    return join(dir, skillName, SKILL_FILENAME);
   }
 
   private readSkillInfoFromDir(dir: string, skillName: string): SkillInfo | null {
@@ -94,12 +100,13 @@ export class SkillRegistry {
     const match = text.match(/^---\s*\n([\s\S]*?)\n---/);
     if (!match) return {};
 
+    const frontmatterBody = match[1];
     const result: Record<string, string> = {};
-    for (const line of match[1].split("\n")) {
-      const colonIdx = line.indexOf(":");
-      if (colonIdx === -1) continue;
-      const key = line.slice(0, colonIdx).trim();
-      const value = line.slice(colonIdx + 1).trim();
+    for (const line of frontmatterBody.split("\n")) {
+      const colonIndex = line.indexOf(":");
+      if (colonIndex === -1) continue;
+      const key = line.slice(0, colonIndex).trim();
+      const value = line.slice(colonIndex + 1).trim();
       result[key] = value;
     }
     return result;

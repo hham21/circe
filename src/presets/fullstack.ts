@@ -4,6 +4,17 @@ import { Pipeline } from "../orchestration/pipeline.js";
 import { Loop } from "../orchestration/loop.js";
 import { Contract } from "../orchestration/contract.js";
 
+const DEFAULT_MAX_BUILD_ROUNDS = 3;
+const DEFAULT_PASS_THRESHOLD = 7;
+const DEFAULT_CONTRACT_ROUNDS = 2;
+
+const DEFAULT_EVALUATION_CRITERIA: Record<string, number> = {
+  design_quality: 0.3,
+  functionality: 0.4,
+  code_quality: 0.2,
+  originality: 0.1,
+};
+
 interface FullstackOptions {
   model?: string;
   maxRounds?: number;
@@ -11,28 +22,21 @@ interface FullstackOptions {
   passThreshold?: number;
 }
 
-function isPassed(result: unknown): boolean {
+function hasPassed(result: unknown): boolean {
   if (result != null && typeof result === "object" && "passed" in result) {
-    return (result as any).passed === true;
+    return (result as { passed: unknown }).passed === true;
   }
   return false;
 }
 
-export function fullstackApp(options?: FullstackOptions): Pipeline {
-  const maxRounds = options?.maxRounds ?? 3;
-  const passThreshold = options?.passThreshold ?? 7;
-  const criteria = options?.evaluatorCriteria ?? {
-    design_quality: 0.3,
-    functionality: 0.4,
-    code_quality: 0.2,
-    originality: 0.1,
-  };
-
-  const criteriaStr = Object.entries(criteria)
-    .map(([k, v]) => `${k} (weight ${v})`)
+function formatCriteriaDescription(criteria: Record<string, number>): string {
+  return Object.entries(criteria)
+    .map(([criterion, weight]) => `${criterion} (weight ${weight})`)
     .join(", ");
+}
 
-  const planner = new BaseAgent({
+function createPlannerAgent(): BaseAgent {
+  return new BaseAgent({
     name: "planner",
     prompt: `You are a senior product designer. Given a user's app idea, expand it into a detailed product specification.
 
@@ -47,23 +51,29 @@ Output a JSON object with this structure:
 Be ambitious — include 10-15 features. Think about AI integration opportunities.
 The tech stack is always: React + Vite (port 5173) frontend, FastAPI (port 8000) backend, SQLite database.`,
   });
+}
 
-  const proposer = new BaseAgent({
-    name: "generator",
+function createContractProposerAgent(): BaseAgent {
+  return new BaseAgent({
+    name: "contract-proposer",
     prompt: `You are a senior full-stack engineer. Given a product spec, propose a detailed build contract.
 Include: feature implementation order, testable acceptance criteria for each feature, architecture decisions.
 Output as a structured proposal that a reviewer can evaluate.`,
   });
+}
 
-  const reviewer = new BaseAgent({
-    name: "evaluator",
+function createContractReviewerAgent(): BaseAgent {
+  return new BaseAgent({
+    name: "contract-reviewer",
     prompt: `You are a senior QA engineer reviewing a build contract.
 Check that every feature has testable acceptance criteria.
 Check that the architecture is sound.
 Output JSON: {"accepted": true/false, "feedback": "..."}`,
   });
+}
 
-  const generator = new BaseAgent({
+function createGeneratorAgent(): BaseAgent {
+  return new BaseAgent({
     name: "generator",
     prompt: `You are a senior full-stack engineer. Build the application according to the spec.
 
@@ -79,8 +89,13 @@ Always:
 - Use relative paths only`,
     continueSession: true,
   });
+}
 
-  const evaluator = new BaseAgent({
+function createEvaluatorAgent(
+  criteriaDescription: string,
+  passThreshold: number
+): BaseAgent {
+  return new BaseAgent({
     name: "evaluator",
     prompt: `You are a strict QA engineer. Test the running application thoroughly.
 
@@ -91,7 +106,7 @@ Test by:
 2. Using Playwright MCP to navigate and interact with the UI
 3. Checking for errors in console and network
 
-Score each criterion (1-10): ${criteriaStr}
+Score each criterion (1-10): ${criteriaDescription}
 Fail if ANY criterion is below ${passThreshold}/10.
 
 Output JSON:
@@ -106,9 +121,25 @@ Output JSON:
     },
     outputSchema: QAReportSchema,
   });
+}
 
-  const contract = new Contract(proposer, reviewer, { maxRounds: 2 });
-  const buildLoop = new Loop(generator, evaluator, { maxRounds, stopWhen: isPassed });
+export function fullstackApp(options?: FullstackOptions): Pipeline {
+  const maxRounds = options?.maxRounds ?? DEFAULT_MAX_BUILD_ROUNDS;
+  const passThreshold = options?.passThreshold ?? DEFAULT_PASS_THRESHOLD;
+  const criteria = options?.evaluatorCriteria ?? DEFAULT_EVALUATION_CRITERIA;
+  const criteriaDescription = formatCriteriaDescription(criteria);
 
-  return new Pipeline(planner, contract, buildLoop);
+  const contractProposer = createContractProposerAgent();
+  const contractReviewer = createContractReviewerAgent();
+  const evaluator = createEvaluatorAgent(criteriaDescription, passThreshold);
+
+  const contract = new Contract(contractProposer, contractReviewer, {
+    maxRounds: DEFAULT_CONTRACT_ROUNDS,
+  });
+  const buildLoop = new Loop(createGeneratorAgent(), evaluator, {
+    maxRounds,
+    stopWhen: hasPassed,
+  });
+
+  return new Pipeline(createPlannerAgent(), contract, buildLoop);
 }

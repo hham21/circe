@@ -4,6 +4,8 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import { executeWithRetry } from "../events.js";
 import { parseTrailingOptions } from "../utils.js";
 
+const DEFAULT_MAX_ROUNDS = 3;
+
 export interface LoopOptions {
   maxRounds?: number;
   stopWhen?: (result: unknown) => boolean;
@@ -26,7 +28,7 @@ export class Loop implements Runnable {
     }
 
     this.agents = agents;
-    this.maxRounds = options.maxRounds ?? 3;
+    this.maxRounds = options.maxRounds ?? DEFAULT_MAX_ROUNDS;
     this.stopWhen = options.stopWhen ?? null;
     this.retryPolicy = options.retryPolicy ?? null;
     this.eventBus = options.eventBus ?? null;
@@ -34,75 +36,65 @@ export class Loop implements Runnable {
 
   async run(input: unknown): Promise<unknown> {
     const formatter = getFormatter() as any;
-    let currentInput = input;
-    let roundResult: unknown = input;
+    let result: unknown = input;
 
     for (let round = 0; round < this.maxRounds; round++) {
-      if (formatter?.logInfo) {
-        formatter.logInfo(`Loop round ${round + 1}/${this.maxRounds}`);
-      }
+      formatter?.logInfo?.(`Loop round ${round + 1}/${this.maxRounds}`);
+      this.emitEvent({ type: "round:start", round });
 
-      this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
+      result = await this.executeRound(round, result);
 
-      try {
-        roundResult = currentInput;
-        let roundCost = 0;
-        for (const agent of this.agents) {
-          if (this.retryPolicy) {
-            const capturedInput = roundResult;
-            roundResult = await executeWithRetry(
-              () => agent.run(capturedInput),
-              this.retryPolicy,
-              (attempt) => {
-                const agentName = (agent as any).name ?? "unknown";
-                this.eventBus?.emit({
-                  type: "retry",
-                  agent: agentName,
-                  attempt,
-                  maxAttempts: this.retryPolicy!.maxRetries,
-                  timestamp: Date.now(),
-                });
-              },
-            );
-          } else {
-            roundResult = await agent.run(roundResult);
-          }
+      formatter?.logRoundResult?.(result);
 
-          const metrics = (agent as any).lastMetrics;
-          if (metrics?.cost) roundCost += metrics.cost;
-        }
-
-        this.eventBus?.emit({
-          type: "round:done",
-          round,
-          result: roundResult,
-          cost: roundCost || undefined,
-          timestamp: Date.now(),
-        });
-      } catch (err: any) {
-        this.eventBus?.emit({
-          type: "round:error",
-          round,
-          error: err.message ?? String(err),
-          timestamp: Date.now(),
-        });
-        throw err;
-      }
-
-      if (formatter?.logRoundResult) {
-        formatter.logRoundResult(roundResult);
-      }
-
-      if (this.stopWhen?.(roundResult)) {
-        if (formatter?.logInfo) {
-          formatter.logInfo("Loop stopped: condition met");
-        }
+      if (this.stopWhen?.(result)) {
+        formatter?.logInfo?.("Loop stopped: condition met");
         break;
       }
-
-      currentInput = roundResult;
     }
 
-    return roundResult;
+    return result;
+  }
+
+  private async executeRound(round: number, input: unknown): Promise<unknown> {
+    try {
+      let result = input;
+      let roundCost = 0;
+
+      for (const agent of this.agents) {
+        result = await this.runAgent(agent, result);
+        const agentCost = (agent as any).lastMetrics?.cost;
+        if (agentCost) roundCost += agentCost;
+      }
+
+      this.emitEvent({ type: "round:done", round, result, cost: roundCost || undefined });
+      return result;
+    } catch (err: any) {
+      this.emitEvent({ type: "round:error", round, error: err.message ?? String(err) });
+      throw err;
+    }
+  }
+
+  private async runAgent(agent: Runnable, input: unknown): Promise<unknown> {
+    if (!this.retryPolicy) {
+      return agent.run(input);
+    }
+
+    return executeWithRetry(
+      () => agent.run(input),
+      this.retryPolicy,
+      (attempt) => {
+        const agentName = (agent as any).name ?? "unknown";
+        this.emitEvent({
+          type: "retry",
+          agent: agentName,
+          attempt,
+          maxAttempts: this.retryPolicy!.maxRetries,
+        });
+      },
+    );
+  }
+
+  private emitEvent(payload: Record<string, unknown>): void {
+    this.eventBus?.emit({ ...payload, timestamp: Date.now() } as any);
   }
 }

@@ -3,6 +3,21 @@ import { Command } from "commander";
 import { executeWorkflow } from "./run.js";
 import { skillsCommand } from "./skills-cmd.js";
 
+interface RunOptions {
+  input: string;
+  output?: string;
+  preset?: boolean;
+  maxRounds?: number;
+  verbose?: boolean;
+}
+
+const BUILT_IN_PRESETS: [name: string, description: string][] = [
+  ["fullstack", "Planner + Generator/Evaluator loop for full-stack apps"],
+  ["frontend-design", "Generator/Evaluator loop for frontend design iteration"],
+];
+
+const PRESET_NAME_COLUMN_WIDTH = 20;
+
 const program = new Command();
 
 program
@@ -18,7 +33,7 @@ program
   .option("--preset", "Use a built-in preset")
   .option("-r, --max-rounds <n>", "Maximum rounds", parseInt)
   .option("-v, --verbose", "Verbose output")
-  .action(async (workflow: string, opts: any) => {
+  .action(async (workflow: string, opts: RunOptions) => {
     await executeWorkflow({
       workflow,
       input: opts.input,
@@ -33,12 +48,8 @@ program
   .command("presets")
   .description("List available presets")
   .action(() => {
-    const presets = [
-      ["fullstack", "Planner + Generator/Evaluator loop for full-stack apps"],
-      ["frontend-design", "Generator/Evaluator loop for frontend design iteration"],
-    ];
-    for (const [name, desc] of presets) {
-      console.log(`  ${name.padEnd(20)} ${desc}`);
+    for (const [name, desc] of BUILT_IN_PRESETS) {
+      console.log(`  ${name.padEnd(PRESET_NAME_COLUMN_WIDTH)} ${desc}`);
     }
   });
 
@@ -46,5 +57,4 @@ program.addCommand(skillsCommand);
 
 export { program };
 
-// Run when executed directly
 program.parse();

@@ -15,6 +15,10 @@ export type ParallelResult = Record<
   | { status: "rejected"; error: string }
 >;
 
+function agentName(agent: Runnable): string {
+  return (agent as any).name ?? String(agent);
+}
+
 export class Parallel implements Runnable {
   private agents: Runnable[];
   private throwOnError: boolean;
@@ -35,63 +39,74 @@ export class Parallel implements Runnable {
   }
 
   async run(input: unknown): Promise<ParallelResult> {
-    const settled = await Promise.allSettled(
-      this.agents.map(async (agent) => {
-        const name = (agent as any).name ?? String(agent);
-        this.eventBus?.emit({ type: "branch:start", branch: name, timestamp: Date.now() });
-
-        try {
-          let result: unknown;
-          if (this.retryPolicy) {
-            result = await executeWithRetry(
-              () => agent.run(input),
-              this.retryPolicy,
-              (attempt) => {
-                this.eventBus?.emit({
-                  type: "retry",
-                  agent: name,
-                  attempt,
-                  maxAttempts: this.retryPolicy!.maxRetries,
-                  timestamp: Date.now(),
-                });
-              },
-            );
-          } else {
-            result = await agent.run(input);
-          }
-
-          const metrics = (agent as any).lastMetrics;
-          this.eventBus?.emit({
-            type: "branch:done",
-            branch: name,
-            result,
-            cost: metrics?.cost,
-            timestamp: Date.now(),
-          });
-
-          return { name, result };
-        } catch (err: any) {
-          this.eventBus?.emit({
-            type: "branch:error",
-            branch: name,
-            error: err.message ?? String(err),
-            timestamp: Date.now(),
-          });
-          throw err;
-        }
-      }),
+    const settledOutcomes = await Promise.allSettled(
+      this.agents.map((agent) => this.runAgent(agent, input)),
     );
 
+    return this.collectResults(settledOutcomes);
+  }
+
+  private async runAgent(agent: Runnable, input: unknown): Promise<{ name: string; result: unknown }> {
+    const name = agentName(agent);
+    this.eventBus?.emit({ type: "branch:start", branch: name, timestamp: Date.now() });
+
+    try {
+      const result = await this.runWithOptionalRetry(agent, name, input);
+
+      const metrics = (agent as any).lastMetrics;
+      this.eventBus?.emit({
+        type: "branch:done",
+        branch: name,
+        result,
+        cost: metrics?.cost,
+        timestamp: Date.now(),
+      });
+
+      return { name, result };
+    } catch (err: any) {
+      this.eventBus?.emit({
+        type: "branch:error",
+        branch: name,
+        error: err.message ?? String(err),
+        timestamp: Date.now(),
+      });
+      throw err;
+    }
+  }
+
+  private async runWithOptionalRetry(agent: Runnable, name: string, input: unknown): Promise<unknown> {
+    if (!this.retryPolicy) {
+      return agent.run(input);
+    }
+
+    return executeWithRetry(
+      () => agent.run(input),
+      this.retryPolicy,
+      (attempt) => {
+        this.eventBus?.emit({
+          type: "retry",
+          agent: name,
+          attempt,
+          maxAttempts: this.retryPolicy!.maxRetries,
+          timestamp: Date.now(),
+        });
+      },
+    );
+  }
+
+  private collectResults(
+    settledOutcomes: PromiseSettledResult<{ name: string; result: unknown }>[],
+  ): ParallelResult {
     const results: ParallelResult = {};
     let firstError: Error | null = null;
 
-    for (let i = 0; i < settled.length; i++) {
-      const outcome = settled[i];
-      const name = (this.agents[i] as any).name ?? String(this.agents[i]);
-
+    for (const [i, outcome] of settledOutcomes.entries()) {
       if (outcome.status === "fulfilled") {
-        results[name] = { status: "fulfilled", value: outcome.value.result };
+        const { name, result } = outcome.value;
+        results[name] = { status: "fulfilled", value: result };
       } else {
+        // When an agent throws, its name must be resolved from the original agent list
+        const name = agentName(this.agents[i]);
         const errorMsg = outcome.reason?.message ?? String(outcome.reason);
         results[name] = { status: "rejected", error: errorMsg };
         if (!firstError) {
