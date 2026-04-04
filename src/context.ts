@@ -1,7 +1,8 @@
 import type { OutputFormatter } from "./cli/output.js";
 import type { SkillRegistry } from "./tools/skills.js";
+import { sessionStore } from "./session.js";
 
-// Module-level singletons shared across the agent session
+// Module-level singletons shared across the agent session (legacy fallback)
 let formatter: OutputFormatter | null = null;
 let workDir: string | null = null;
 let skillRegistry: SkillRegistry | null = null;
@@ -11,7 +12,7 @@ export function setFormatter(value: OutputFormatter | null): void {
 }
 
 export function getFormatter(): OutputFormatter | null {
-  return formatter;
+  return sessionStore.getStore()?.formatter ?? formatter;
 }
 
 export function setWorkDir(value: string | null): void {
@@ -19,7 +20,7 @@ export function setWorkDir(value: string | null): void {
 }
 
 export function getWorkDir(): string | null {
-  return workDir;
+  return sessionStore.getStore()?.workDir ?? workDir;
 }
 
 export function setSkillRegistry(value: SkillRegistry | null): void {
@@ -27,5 +28,5 @@ export function setSkillRegistry(value: SkillRegistry | null): void {
 }
 
 export function getSkillRegistry(): SkillRegistry | null {
-  return skillRegistry;
+  return sessionStore.getStore()?.skillRegistry ?? skillRegistry;
 }

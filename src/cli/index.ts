@@ -6,7 +6,6 @@ import { skillsCommand } from "./skills-cmd.js";
 interface RunOptions {
   input: string;
   output?: string;
-  maxRounds?: number;
   verbose?: boolean;
 }
 
@@ -22,14 +21,12 @@ program
   .description("Run a workflow file")
   .requiredOption("-i, --input <input>", "User input or path to spec file")
   .option("-o, --output <dir>", "Output directory")
-  .option("-r, --max-rounds <n>", "Maximum rounds", parseInt)
   .option("-v, --verbose", "Verbose output")
   .action(async (workflow: string, opts: RunOptions) => {
     await executeWorkflow({
       workflow,
       input: opts.input,
       outputDir: opts.output,
-      maxRounds: opts.maxRounds,
       verbose: opts.verbose,
     });
   });
