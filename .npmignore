@@ -1,0 +1,15 @@
+tests/
+examples/
+docs/
+output/
+.github/
+.circe/
+.claude/
+.gstack/
+.superpowers/
+*.test.ts
+tsconfig.examples.json
+vitest.config.ts
+uv.lock
+TODOS.md
+CLAUDE.md

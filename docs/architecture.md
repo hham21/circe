@@ -10,7 +10,7 @@ Core insight: every harness component encodes an assumption about what the LLM c
 
 ```
 src/
-├── agent.ts              # Core agent abstraction (BaseAgent, agent(), loadAgent())
+├── agent.ts              # Core agent abstraction (Agent, agent(), loadAgent())
 ├── handoff.ts            # Agent-to-agent communication schemas (Zod)
 ├── context.ts            # Global context (formatter, workDir)
 ├── types.ts              # RunContext, Runnable interface
@@ -47,7 +47,7 @@ src/
 │  Pipeline, Loop, Parallel, Contract, Sprint  │
 ├─────────────────────────────────────────────┤
 │  Agent Layer                                 │
-│  BaseAgent: Claude Agent SDK wrapper         │
+│  Agent: Claude Agent SDK wrapper         │
 ├─────────────────────────────────────────────┤
 │  Tool Layer                                  │
 │  SDK built-in tools, MCP servers, Skills     │
@@ -58,12 +58,12 @@ src/
 
 ## Core Components
 
-### 1. BaseAgent (`agent.ts`)
+### 1. Agent (`agent.ts`)
 
 Base class for all agents. Wraps the Claude Agent SDK for structured execution.
 
 ```typescript
-class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
+class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   name: string;                      // "planner", "generator", etc.
   prompt: string;                    // System prompt
   tools: string[] | null;            // ["Read", "Bash"] or null (allow all)
@@ -86,7 +86,7 @@ class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
 - Cost tracking from SDK's `total_cost_usd`, exposed via `lastMetrics`
 - Skill summary auto-injected into system prompt
 
-**`agent()` factory:** Creates a BaseAgent from a config object.
+**`agent()` factory:** Creates a Agent from a config object.
 
 **`loadAgent(name)`:** Dynamically loads an agent from `~/.circe/agents/<name>.json`.
 

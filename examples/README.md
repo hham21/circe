@@ -22,7 +22,7 @@ Costs are based on `claude-opus-4-6` default pricing. Each SDK call includes ~11
 
 | # | Example | Primitives | Difficulty | Est. Cost | Description |
 |---|---------|-----------|------------|-----------|-------------|
-| 01 | [single-agent](01-single-agent.ts) | BaseAgent | Beginner | ~$0.09 | Hello world — one agent, one task |
+| 01 | [single-agent](01-single-agent.ts) | Agent | Beginner | ~$0.09 | Hello world — one agent, one task |
 | 02 | [pipeline](02-pipeline.ts) | Pipeline | Beginner | ~$0.27 | Sequential chaining with per-step cost |
 | 03 | [loop](03-loop.ts) | Loop | Beginner | ~$0.55 | Iterative refinement (GAN pattern) |
 | 04 | [parallel](04-parallel.ts) | Parallel | Intermediate | ~$0.18 | Concurrent execution + partial failure |

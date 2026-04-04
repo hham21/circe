@@ -6,32 +6,32 @@
 // 3 research agents gather info in parallel → synthesizer combines → reviewer refines.
 // Builds on 02-pipeline, 03-loop, and 04-parallel combined.
 
-import { BaseAgent, Pipeline, Parallel, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Pipeline, Parallel, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
 // Phase 1: Parallel research from 3 angles
-const historian = new BaseAgent({
+const historian = new Agent({
   name: "historian",
   prompt: "You are a historian. Give 2 historical facts about the topic. Output ONLY the facts.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const scientist = new BaseAgent({
+const scientist = new Agent({
   name: "scientist",
   prompt: "You are a scientist. Give 2 scientific facts about the topic. Output ONLY the facts.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const economist = new BaseAgent({
+const economist = new Agent({
   name: "economist",
   prompt: "You are an economist. Give 2 economic facts about the topic. Output ONLY the facts.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
 // Phase 2: Synthesize parallel results into a report
-const synthesizer = new BaseAgent({
+const synthesizer = new Agent({
   name: "synthesizer",
   prompt: `You receive research results from multiple experts as a JSON object.
 Synthesize them into a brief, coherent 3-paragraph summary.
@@ -40,14 +40,14 @@ Output ONLY the summary text.`,
 });
 
 // Phase 3: Quality check loop
-const polisher = new BaseAgent({
+const polisher = new Agent({
   name: "polisher",
   prompt: `You receive a research summary (or QA feedback). Improve clarity and flow.
 Output ONLY the improved summary.`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const editor = new BaseAgent({
+const editor = new Agent({
   name: "editor",
   prompt: `Score the summary on "quality" (1-10). Pass if quality >= 10.
 Check for: coherence, factual integration, readability.

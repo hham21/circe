@@ -1,4 +1,4 @@
-import { BaseAgent } from "../agent.js";
+import { Agent } from "../agent.js";
 import { QAReportSchema, hasQAPassed } from "../handoff.js";
 import { Pipeline } from "../orchestration/pipeline.js";
 import { Loop } from "../orchestration/loop.js";
@@ -30,8 +30,8 @@ function formatCriteriaDescription(criteria: Record<string, number>): string {
     .join(", ");
 }
 
-function createPlannerAgent(): BaseAgent {
-  return new BaseAgent({
+function createPlannerAgent(): Agent {
+  return new Agent({
     name: "planner",
     prompt: `You are a senior product designer. Given a user's app idea, expand it into a detailed product specification.
 
@@ -48,8 +48,8 @@ The tech stack is always: React + Vite (port 5173) frontend, FastAPI (port 8000)
   });
 }
 
-function createContractProposerAgent(): BaseAgent {
-  return new BaseAgent({
+function createContractProposerAgent(): Agent {
+  return new Agent({
     name: "contract-proposer",
     prompt: `You are a senior full-stack engineer. Given a product spec, propose a detailed build contract.
 Include: feature implementation order, testable acceptance criteria for each feature, architecture decisions.
@@ -57,8 +57,8 @@ Output as a structured proposal that a reviewer can evaluate.`,
   });
 }
 
-function createContractReviewerAgent(): BaseAgent {
-  return new BaseAgent({
+function createContractReviewerAgent(): Agent {
+  return new Agent({
     name: "contract-reviewer",
     prompt: `You are a senior QA engineer reviewing a build contract.
 Check that every feature has testable acceptance criteria.
@@ -67,8 +67,8 @@ Output JSON: {"accepted": true/false, "feedback": "..."}`,
   });
 }
 
-function createGeneratorAgent(): BaseAgent {
-  return new BaseAgent({
+function createGeneratorAgent(): Agent {
+  return new Agent({
     name: "generator",
     prompt: `You are a senior full-stack engineer. Build the application according to the spec.
 
@@ -89,8 +89,8 @@ Always:
 function createEvaluatorAgent(
   criteriaDescription: string,
   passThreshold: number
-): BaseAgent {
-  return new BaseAgent({
+): Agent {
+  return new Agent({
     name: "evaluator",
     prompt: `You are a strict QA engineer. Test the running application thoroughly.
 

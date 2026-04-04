@@ -1,4 +1,4 @@
-import { BaseAgent } from "../agent.js";
+import { Agent } from "../agent.js";
 import { QAReportSchema, hasQAPassed } from "../handoff.js";
 import { Loop } from "../orchestration/loop.js";
 import { PLAYWRIGHT_MCP_SERVER } from "../utils.js";
@@ -25,8 +25,8 @@ export function frontendDesign(options?: FrontendDesignOptions): Loop {
   });
 }
 
-function createGenerator(passThreshold: number): BaseAgent {
-  return new BaseAgent({
+function createGenerator(passThreshold: number): Agent {
+  return new Agent({
     name: "generator",
     prompt: `You are an elite frontend craftsperson. Build pure HTML/CSS/JS (no frameworks).
 
@@ -59,8 +59,8 @@ Target: ALL criteria must score ${passThreshold}/10 or higher.`,
   });
 }
 
-function createEvaluator(passThreshold: number): BaseAgent {
-  return new BaseAgent({
+function createEvaluator(passThreshold: number): Agent {
+  return new Agent({
     name: "evaluator",
     prompt: `You are a ruthless design critic with no memory of previous rounds. Load the design-critique skill via use_skill("design-critique") for detailed methodology, anti-patterns, and scoring guide.
 

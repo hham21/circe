@@ -1,5 +1,5 @@
 // Example 11: EventBus (Observability & Cost Tracking)
-// Primitives: EventBus, Pipeline, BaseAgent
+// Primitives: EventBus, Pipeline, Agent
 // Difficulty: Advanced
 // Estimated cost: ~$0.18
 //
@@ -7,7 +7,7 @@
 // getCostSummary() gives per-agent cost breakdown.
 // Add this pattern to any example above for full observability.
 
-import { BaseAgent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
@@ -23,13 +23,13 @@ bus.on("step:done", (e) => {
   console.log(`  <<< Step ${e.step} done: ${e.agent} (cost: $${e.cost?.toFixed(4) ?? "N/A"})`);
 });
 
-const translator = new BaseAgent({
+const translator = new Agent({
   name: "translator",
   prompt: "Translate the input to Korean. Output ONLY the translation.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const formatter = new BaseAgent({
+const formatter = new Agent({
   name: "formatter",
   prompt: "Take the Korean text and add a relevant emoji prefix. Output ONLY the result.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],

@@ -69,7 +69,7 @@ await app.run("Build a retro game maker");
 ### Agents
 
 ```typescript
-import { BaseAgent, agent } from "circe";
+import { Agent, agent } from "circe";
 
 // Factory function (simple)
 const reviewer = agent({
@@ -79,7 +79,7 @@ const reviewer = agent({
 });
 
 // Class (fine-grained control)
-const evaluator = new BaseAgent({
+const evaluator = new Agent({
   name: "evaluator",
   prompt: "Strict QA engineer.",
   tools: ["Read", "Bash"],
@@ -185,7 +185,7 @@ circe workflows delete my-pipe
 ```
 CLI Layer          circe run, agents, workflows
 Orchestration      Pipeline, Loop, Parallel, Sprint, Contract
-Agent Layer        BaseAgent, agent(), Handoff, Context Strategy
+Agent Layer        Agent, agent(), Handoff, Context Strategy
 Tool Layer         SDK built-ins, tool(), MCP servers, Skills
 ```
 

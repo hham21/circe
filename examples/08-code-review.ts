@@ -1,18 +1,18 @@
 // Example 08: Code Review (Practical GAN Pattern)
-// Primitives: Loop, BaseAgent, QAReportSchema
+// Primitives: Loop, Agent, QAReportSchema
 // Difficulty: Intermediate
 // Estimated cost: ~$0.55 (3 rounds max)
 //
 // Same pattern as 03-loop, but applied to a real engineering task.
 // A code writer generates a function, a code reviewer critiques it, iterate.
 
-import { BaseAgent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 // Enable verbose output to see full agent responses
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
-const coder = new BaseAgent({
+const coder = new Agent({
   name: "coder",
   prompt: `You are a TypeScript developer.
 If the input is a task description, write a function that solves it.
@@ -21,7 +21,7 @@ Output ONLY the TypeScript code, nothing else.`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const reviewer = new BaseAgent({
+const reviewer = new Agent({
   name: "reviewer",
   prompt: `You are a senior code reviewer. Review the TypeScript code for:
 - Correctness (logic errors, edge cases)

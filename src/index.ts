@@ -1,4 +1,4 @@
-export { BaseAgent, agent, loadAgent, type ResultMetrics } from "./agent.js";
+export { Agent, Agent as BaseAgent, agent, loadAgent, type ResultMetrics } from "./agent.js";
 export {
   EventBus,
   executeWithRetry,

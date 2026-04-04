@@ -10,7 +10,7 @@
 // Combines EventBus (11) with retry and Pipeline.resume() capabilities.
 
 import type { Runnable, OrchestratorEvent } from "../src/index.js";
-import { BaseAgent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 import { writeFileSync, readFileSync } from "node:fs";
 
 const verbose = process.argv.includes("--verbose");
@@ -39,14 +39,14 @@ const bus = new EventBus();
 bus.on("retry", (e) => console.log(`  ⟳ Retry ${e.attempt}/${e.maxAttempts} for ${e.agent}`));
 bus.on("step:done", (e) => console.log(`  ✓ Step ${e.step} (${e.agent}) done`));
 
-const step1 = new BaseAgent({
+const step1 = new Agent({
   name: "brainstorm",
   prompt: "Generate 3 creative band name ideas. Output ONLY a numbered list.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
 const step2 = flakyAgent(
-  new BaseAgent({
+  new Agent({
     name: "evaluate",
     prompt: "Pick the best band name from the list and explain why in one sentence. Format: 'Name — reason'.",
     disallowedTools: ["Bash", "Read", "Write", "Edit"],
@@ -54,7 +54,7 @@ const step2 = flakyAgent(
   2, // Fails twice, succeeds on 3rd attempt
 );
 
-const step3 = new BaseAgent({
+const step3 = new Agent({
   name: "tagline",
   prompt: "Create a catchy one-line slogan for the band. Output ONLY the slogan.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
