@@ -18,17 +18,11 @@ Requires Node.js 22+ and [Claude Code](https://claude.ai/code) authenticated via
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Run examples with `npx tsx`:
+Run examples with `npx tsx` (see [examples/README.md](examples/README.md) for the full list):
 
 ```bash
 npx tsx examples/01-single-agent.ts
-npx tsx examples/02-pipeline.ts
-npx tsx examples/03-loop.ts
-npx tsx examples/04-parallel.ts
-npx tsx examples/05-contract.ts
-npx tsx examples/06-combo.ts
-npx tsx examples/07-loop-fail.ts
-npx tsx examples/08-frontend-design.ts
+npx tsx examples/06-compose.ts    # the money shot — nested primitives
 ```
 
 ## Quick Start
@@ -98,27 +92,28 @@ All Claude Agent SDK built-in tools (Read, Write, Edit, Bash, Glob, Grep, WebSea
 
 ### Orchestrators
 
-Five composable building blocks:
+Five composable building blocks, all generic: `Runnable<TIn, TOut>`.
 
 | Orchestrator | Purpose | Example |
 |---|---|---|
-| `Pipeline` | Sequential execution | `new Pipeline(planner, builder)` |
+| `Pipeline` | Sequential execution | `new Pipeline(planner, builder)` or `pipe(a, b, c)` |
 | `Loop` | Repeat until condition | `new Loop(gen, eval, { maxRounds: 3, stopWhen: ... })` |
 | `Parallel` | Concurrent execution | `new Parallel(frontend, backend)` |
 | `Contract` | Pre-build negotiation | `new Contract(proposer, reviewer)` |
-| `Sprint` | Feature decomposition | `new Sprint(innerOrchestrator)` |
+| `Sprint` | Feature decomposition | `new Sprint(runner)` |
+
+Loop and Contract return **producer output on success** (the content, not the evaluation). Access evaluation via `.lastEvaluatorResult`. All orchestrators expose `.lastMetrics` for cost tracking.
 
 Compose freely:
 
 ```typescript
-// Simple
-new Pipeline(planner, new Loop(generator, evaluator, { maxRounds: 3 }));
+import { pipe } from "circe";
+
+// Type-safe pipeline — compiler checks that output types chain correctly
+pipe(planner, new Loop(generator, evaluator, { maxRounds: 3 }));
 
 // With negotiation
-new Pipeline(planner, new Contract(generator, evaluator), new Loop(generator, evaluator));
-
-// Parallel build
-new Pipeline(planner, new Parallel(frontendGen, backendGen), integrationEvaluator);
+pipe(planner, new Contract(proposer, reviewer), new Loop(generator, evaluator));
 ```
 
 ### Tools

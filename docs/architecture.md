@@ -63,7 +63,7 @@ src/
 Base class for all agents. Wraps the Claude Agent SDK for structured execution.
 
 ```typescript
-class BaseAgent {
+class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   name: string;                      // "planner", "generator", etc.
   prompt: string;                    // System prompt
   tools: string[] | null;            // ["Read", "Bash"] or null (allow all)
@@ -72,17 +72,18 @@ class BaseAgent {
   permissionMode: string;            // "bypassPermissions"
   continueSession: boolean;          // Reuse session across runs
   inputSchema: ZodSchema | null;     // Input validation (optional)
-  outputSchema: ZodSchema | null;    // Auto JSON parsing (optional)
+  outputSchema: ZodSchema | null;    // Auto JSON parsing + SDK outputFormat
 
-  async run(input: unknown): Promise<unknown>
+  async run(input: TIn): Promise<TOut>
 }
 ```
 
 **Key features:**
+- Generic `<TIn, TOut>` for compile-time type safety in agent chains
 - Optional input validation via `inputSchema` (Zod)
-- Auto JSON output parsing when `outputSchema` is set
+- Auto JSON output parsing when `outputSchema` is set; SDK `outputFormat` for model-level JSON guarantee
 - Token counting with cache-inclusive totals
-- Cost tracking from SDK's `total_cost_usd`
+- Cost tracking from SDK's `total_cost_usd`, exposed via `lastMetrics`
 - Skill summary auto-injected into system prompt
 
 **`agent()` factory:** Creates a BaseAgent from a config object.
@@ -113,7 +114,7 @@ Five composable patterns:
 | **Contract** | Proposal-review negotiation loop | `new Contract(proposer, reviewer, { maxRounds: 3 })` |
 | **Sprint** | Decompose into features, run each | `new Sprint(innerOrchestrator)` |
 
-All patterns implement the `Runnable` interface and **compose recursively**:
+All patterns implement `Runnable<TIn, TOut>` and **compose recursively**. Loop and Contract return producer output on success (`.lastEvaluatorResult` for evaluation). All orchestrators expose `.lastMetrics` for cost tracking. Use `pipe()` for type-safe pipeline composition:
 
 ```typescript
 new Pipeline(
@@ -325,15 +326,17 @@ Execution creates a slug-based directory under `./output/`:
 
 ### Runnable Interface
 
-All agents and orchestrators implement the same interface:
+All agents and orchestrators implement the same generic interface:
 
 ```typescript
-interface Runnable {
-  run(input: unknown): Promise<unknown>;
+interface Runnable<TIn = unknown, TOut = unknown> {
+  name?: string;
+  lastMetrics?: MetricsSnapshot | null;
+  run(input: TIn): Promise<TOut>;
 }
 ```
 
-This allows free composition — orchestrators can contain other orchestrators.
+This allows free composition with compile-time type checking. `pipe(a, b)` verifies that `a`'s output type matches `b`'s input type.
 
 ### Structured Handoffs
 
@@ -356,6 +359,7 @@ Every component is optional and replaceable.
 |---------|---------|
 | `@anthropic-ai/claude-agent-sdk` | Claude agent execution |
 | `zod` | Handoff schema validation |
+| `zod-to-json-schema` | Zod → JSON Schema for SDK outputFormat |
 | `commander` | CLI framework |
 | `chalk` | Terminal output formatting |
 
