@@ -35,8 +35,9 @@ Costs are based on `claude-opus-4-6` default pricing. Each SDK call includes ~11
 | 11 | [eventbus](11-eventbus.ts) | EventBus | Advanced | ~$0.18 | Observability and cost tracking |
 | 12 | [retry-resume](12-retry-resume.ts) | RetryPolicy, Pipeline.resume() | Advanced | ~$0.45 | Error recovery + checkpointing |
 | 13 | [skills](13-skills.ts) | SkillRegistry | Advanced | ~$0.09 | Prompt injection + on-demand loading |
+| 14 | [session](14-session.ts) | Session | Beginner | ~$0.55 | Zero-config context via AsyncLocalStorage |
 
-**Total estimated cost to run all examples: ~$7**
+**Total estimated cost to run all examples: ~$8**
 
 ## Learning Path
 
@@ -65,8 +66,9 @@ flowchart TD
     B --> K[11 eventbus]
     B --> L[12 retry-resume]
     A --> M[13 skills]
+    A --> N[14 session]
 
     style G fill:#f96,stroke:#333,stroke-width:2px
 ```
 
-Start with **01** to understand the basics, then explore primitives (**02-05, 07**). Example **06** is the key insight — composability. Practical scenarios (**08-10**) show real-world usage. Infrastructure examples (**11-13**) add observability, resilience, and extensibility.
+Start with **01** to understand the basics, then explore primitives (**02-05, 07**). Example **06** is the key insight — composability. Practical scenarios (**08-10**) show real-world usage. Infrastructure examples (**11-13**) add observability, resilience, and extensibility. Example **14** shows how Session eliminates boilerplate.

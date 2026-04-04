@@ -12,7 +12,8 @@ Core insight: every harness component encodes an assumption about what the LLM c
 src/
 ├── agent.ts              # Core agent abstraction (Agent, agent(), loadAgent())
 ├── handoff.ts            # Agent-to-agent communication schemas (Zod)
-├── context.ts            # Global context (formatter, workDir)
+├── session.ts            # Session + AsyncLocalStorage context propagation
+├── context.ts            # Context getters (session-aware with global fallback)
 ├── types.ts              # RunContext, Runnable interface
 ├── cli/                  # CLI interface (Commander-based)
 │   ├── index.ts          # Entry point (circe command)
@@ -29,8 +30,7 @@ src/
 ├── tools/                # Tool & skill registry
 │   ├── custom.ts         # tool() decorator
 │   └── skills.ts         # SkillRegistry (SKILL.md discovery)
-└── session/              # Session persistence
-    └── manager.ts        # SessionManager (JSON files)
+└── utils.ts              # Shared utilities (circeHome, PLAYWRIGHT_MCP_SERVER)
 ```
 
 ## Layer Architecture
@@ -44,7 +44,7 @@ src/
 │  Pipeline, Loop, Parallel, Contract, Sprint  │
 ├─────────────────────────────────────────────┤
 │  Agent Layer                                 │
-│  Agent: Claude Agent SDK wrapper         │
+│  Agent: Claude Agent SDK wrapper              │
 ├─────────────────────────────────────────────┤
 │  Tool Layer                                  │
 │  SDK built-in tools, MCP servers, Skills     │
@@ -63,6 +63,7 @@ Base class for all agents. Wraps the Claude Agent SDK for structured execution.
 class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   name: string;                      // "planner", "generator", etc.
   prompt: string;                    // System prompt
+  model: string | undefined;         // "claude-sonnet-4-6" (per-agent model)
   tools: string[] | null;            // ["Read", "Bash"] or null (allow all)
   skills: string[];                  // ["qa", "browse"]
   contextStrategy: "compaction" | "reset";
@@ -83,7 +84,7 @@ class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
 - Cost tracking from SDK's `total_cost_usd`, exposed via `lastMetrics`
 - Skill summary auto-injected into system prompt
 
-**`agent()` factory:** Creates a Agent from a config object.
+**`agent()` factory:** Creates an Agent from a config object.
 
 **`loadAgent(name)`:** Dynamically loads an agent from `~/.circe/agents/<name>.json`.
 
@@ -146,12 +147,19 @@ description: Test web apps with Playwright
 
 Skills are not hardcoded — agents call `use_skill("qa")` at runtime to load the full content.
 
-### 5. Session Manager (`session/manager.ts`)
+### 5. Session (`session.ts`)
 
-Persists execution sessions as JSON in `~/.circe/sessions/`:
-- UUID-based session ID (8 chars)
-- Status tracking: `running` → `completed` | `failed`
-- Workflow name, input text, timestamps
+Zero-config context management via `AsyncLocalStorage`:
+
+```typescript
+const session = new Session({ outputDir: "./output", verbose: true });
+await session.run(() => orchestrator.run(input));
+```
+
+- Auto-creates outputDir, OutputFormatter, SkillRegistry
+- Context propagates through any orchestrator nesting depth
+- Parallel sessions are isolated (no shared global state)
+- Teardown (formatter.close()) runs in finally block
 
 ---
 
@@ -202,71 +210,6 @@ The core of Circe is the **Generator-Evaluator adversarial loop**:
 2. **Iterative improvement** — feedback loops drive quality up each round.
 3. **Deterministic termination** — `QAReport.passed === true` or `maxRounds` reached.
 
-### Data Flow (Fullstack Preset)
-
-```
-User: "Build a memo app"
-  │
-  ↓
-[CLI] Parse input → Create output dir (./output/memo-app/) → Setup logging
-  │
-  ↓
-[Planner] Expand prompt
-  │ Input: "Build a memo app"
-  │ Output: ProductSpec {
-  │   appName: "memo-app",
-  │   features: [10-15 features],
-  │   techStack: {frontend: "React+Vite", backend: "FastAPI", db: "SQLite"},
-  │   designDirection: "..."
-  │ }
-  │
-  ↓
-[Contract] Build plan negotiation
-  │ Proposer: Propose build plan + testable criteria
-  │ Reviewer: Review criteria → accept or feedback
-  │ (max 2 rounds)
-  │
-  ↓
-[Loop] Build-QA iteration (max 3 rounds)
-  │
-  │ Round 1:
-  │   Generator: Build app → React+Vite(5173) + FastAPI(8000) servers
-  │   Evaluator: API calls + Playwright testing → QAReport
-  │   → passed=false → feedback to Round 2
-  │
-  │ Round 2:
-  │   Generator: Apply feedback, fix issues
-  │   Evaluator: Retest → QAReport
-  │   → passed=true → exit
-  │
-  ↓
-[CLI] Print result + save circe.log
-```
-
-### Data Flow (Frontend Design Preset)
-
-```
-User: "Dutch art museum website"
-  │
-  ↓
-[Planner] Create design brief
-  │ Color palette, Google Fonts, spatial composition, motion specs
-  │
-  ↓
-[Loop] Design iteration (max 10 rounds)
-  │
-  │ Each round:
-  │   Generator: Build HTML/CSS/JS, git commit, read _scores.md
-  │     - Pivot aesthetics if scores plateau
-  │     - Rollback if scores drop
-  │   Evaluator: Screenshot capture, interaction testing
-  │     - 4 criteria: design_quality(0.35), originality(0.35),
-  │       craft(0.15), functionality(0.15)
-  │     - Save screenshots to ./screenshots/round-N/
-  │     - Write scores to _scores.md
-  │   → Exit when all criteria >= 9/10
-```
-
 ### Context Strategy
 
 | Strategy | When to use |
@@ -282,17 +225,12 @@ Compaction prevents "context anxiety" — the tendency for agents to terminate e
 
 ```bash
 # Run a workflow file
-circe run workflow.js -i "spec.md" -o ./my-output
+circe run workflow.js -i "spec.md" -o ./my-output -v
 
-# Agent management
-circe agents create my-reviewer --prompt "Review code." --tools "Read,Grep"
-circe agents list
-circe agents info my-reviewer
-circe agents delete my-reviewer
-
-# Workflow management
-circe workflows create my-pipe --agents "planner,generator,evaluator"
-circe workflows list
+# Skill management
+circe skills list
+circe skills create my-skill
+circe skills info my-skill
 ```
 
 ### Output Structure

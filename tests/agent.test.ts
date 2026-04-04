@@ -147,7 +147,7 @@ describe("Agent", () => {
 });
 
 describe("agent factory", () => {
-  it("creates a Agent from config", () => {
+  it("creates an Agent from config", () => {
     const myAgent = agent({
       name: "planner",
       prompt: "Plan the app.",

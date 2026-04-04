@@ -7,60 +7,46 @@ Inspired by Anthropic's [Harness Design for Long-Running Application Development
 ## Install
 
 ```bash
-git clone https://github.com/hham21/circe.git
-cd circe
-npm install
+npm install @hham21/circe
 ```
 
-Requires Node.js 22+ and [Claude Code](https://claude.ai/code) authenticated via OAuth or API key:
+Requires Node.js 22+ and a Claude API key:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Run examples with `npx tsx` (see [examples/README.md](examples/README.md) for the full list):
-
-```bash
-npx tsx examples/01-single-agent.ts
-npx tsx examples/06-compose.ts    # the money shot — nested primitives
-```
-
 ## Quick Start
 
 ```typescript
-import { Pipeline, Loop, agent } from "circe";
+import { Agent, Loop, Session } from "@hham21/circe";
 
-const planner = agent({
-  name: "planner",
-  prompt: "Expand the user prompt into a detailed product spec.",
-});
-
-const generator = agent({
+const generator = new Agent({
   name: "generator",
   prompt: "Build the app based on the spec or QA feedback.",
+  model: "claude-sonnet-4-6",
 });
 
-const evaluator = agent({
+const evaluator = new Agent({
   name: "evaluator",
-  prompt: "Test the app with Playwright. FAIL with feedback if issues found.",
-  tools: ["Read", "Bash", "Glob", "Grep"],
-  skills: ["qa", "browse"],
+  prompt: "Test the app. FAIL with feedback if issues found.",
+  model: "claude-opus-4-6",
 });
 
-const app = new Pipeline(
-  planner,
-  new Loop(generator, evaluator, { maxRounds: 3, stopWhen: (r: any) => r.passed }),
-);
+const loop = new Loop(generator, evaluator, { maxRounds: 3 });
 
-await app.run("Build a retro game maker");
+await new Session({ outputDir: "./output", verbose: true })
+  .run(() => loop.run("Build a retro game maker"));
 ```
+
+See [examples/](examples/README.md) for 14 progressive examples (`npx tsx examples/01-single-agent.ts`).
 
 ## Concepts
 
 ### Agents
 
 ```typescript
-import { Agent, agent } from "circe";
+import { Agent, agent } from "@hham21/circe";
 
 // Factory function (simple)
 const reviewer = agent({
@@ -73,13 +59,14 @@ const reviewer = agent({
 const evaluator = new Agent({
   name: "evaluator",
   prompt: "Strict QA engineer.",
+  model: "claude-opus-4-6",
   tools: ["Read", "Bash"],
   skills: ["qa"],
   contextStrategy: "reset",
 });
 ```
 
-All Claude Agent SDK built-in tools (Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Agent) are available by default. Restrict with `tools`.
+All Claude Agent SDK built-in tools (Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Agent) are available by default. Restrict with `tools`. Set `model` per agent to control cost/capability.
 
 ### Orchestrators
 
@@ -98,7 +85,7 @@ Loop and Contract return **producer output on success** (the content, not the ev
 Compose freely:
 
 ```typescript
-import { pipe } from "circe";
+import { pipe } from "@hham21/circe";
 
 // Type-safe pipeline — compiler checks that output types chain correctly
 pipe(planner, new Loop(generator, evaluator, { maxRounds: 3 }));
@@ -107,10 +94,25 @@ pipe(planner, new Loop(generator, evaluator, { maxRounds: 3 }));
 pipe(planner, new Contract(proposer, reviewer), new Loop(generator, evaluator));
 ```
 
+### Session
+
+Session eliminates boilerplate. It auto-creates the output directory, sets up logging, initializes the skill registry, and cleans up when done. Context propagates through any orchestrator nesting via `AsyncLocalStorage`.
+
+```typescript
+import { Session } from "@hham21/circe";
+
+const session = new Session({ outputDir: "./output/my-app", verbose: true });
+await session.run(() => pipeline.run("Build a todo app"));
+
+console.log(`Duration: ${session.duration.toFixed(1)}s`);
+```
+
+Without Session, you can still use the global setters (`setFormatter`, `setWorkDir`, `setSkillRegistry`) directly.
+
 ### Tools
 
 ```typescript
-import { tool } from "circe";
+import { tool } from "@hham21/circe";
 
 const searchNpm = tool(function searchNpm(query: string): string {
   // Search npm packages
@@ -128,7 +130,7 @@ Skills are on-demand prompt templates. Agents load them when needed:
 const evaluator = agent({
   name: "evaluator",
   prompt: "QA engineer.",
-  skills: ["qa", "browse"],
+  skills: ["qa"],
 });
 ```
 
@@ -153,24 +155,19 @@ Zod schemas for structured agent-to-agent data passing:
 
 ```bash
 # Run a workflow file
-circe run workflow.js -i "prompt or spec file"
+circe run workflow.js -i "prompt or spec file" -v
 
-# Agent management
-circe agents create my-reviewer --prompt "Review code." --tools "Read,Grep"
-circe agents list
-circe agents info my-reviewer
-circe agents delete my-reviewer
-
-# Workflow management
-circe workflows create my-pipe --agents "planner,generator,evaluator"
-circe workflows list
-circe workflows delete my-pipe
+# Skill management
+circe skills list
+circe skills create my-skill
+circe skills info my-skill
 ```
 
 ## Architecture
 
 ```
-CLI Layer          circe run, agents, workflows
+Session Layer      Session (AsyncLocalStorage context propagation)
+CLI Layer          circe run, skills
 Orchestration      Pipeline, Loop, Parallel, Sprint, Contract
 Agent Layer        Agent, agent(), Handoff, Context Strategy
 Tool Layer         SDK built-ins, tool(), MCP servers, Skills
