@@ -2,68 +2,102 @@ import type { Runnable } from "../types.js";
 import { findJsonString } from "../utils.js";
 import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
+import { createMetrics, accumulateMetrics } from "../utils.js";
+import type { MetricsAccumulator } from "../utils.js";
 
 const DEFAULT_MAX_ROUNDS = 3;
 
-export interface ContractOptions {
+export interface ContractOptions<TReview = unknown> {
   maxRounds?: number;
+  isAccepted?: (review: TReview) => boolean;
   retryPolicy?: RetryPolicy;
   eventBus?: EventBus;
 }
 
-export class Contract implements Runnable {
+export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> implements Runnable<TIn, TProposal> {
   name?: string;
-  private proposer: Runnable;
-  private reviewer: Runnable;
+  private proposer: Runnable<TIn, TProposal>;
+  private reviewer: Runnable<TProposal, TReview>;
   private maxRounds: number;
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
+  private customIsAccepted: ((review: TReview) => boolean) | null = null;
+  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
+  private _lastProposal: TProposal | null = null;
+  private _lastEvaluatorResult: TReview | null = null;
 
-  constructor(proposer: Runnable, reviewer: Runnable, options?: ContractOptions) {
+  constructor(proposer: Runnable<TIn, TProposal>, reviewer: Runnable<TProposal, TReview>, options?: ContractOptions<TReview>) {
     this.proposer = proposer;
     this.reviewer = reviewer;
     this.maxRounds = options?.maxRounds ?? DEFAULT_MAX_ROUNDS;
+    this.customIsAccepted = options?.isAccepted ?? null;
     this.retryPolicy = options?.retryPolicy ?? null;
     this.eventBus = options?.eventBus ?? null;
   }
 
-  async run(input: unknown): Promise<unknown> {
-    let proposalInput = input;
-    let review: unknown;
+  get lastMetrics() { return this._lastMetrics; }
+  get lastEvaluatorResult(): TReview | null { return this._lastEvaluatorResult; }
 
-    for (let round = 0; round < this.maxRounds; round++) {
-      this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
+  async run(input: TIn): Promise<TProposal> {
+    this._lastMetrics = null;
+    this._lastProposal = null;
+    this._lastEvaluatorResult = null;
 
-      try {
-        review = await this.executeRound(round, proposalInput);
-      } catch (err: any) {
-        this.eventBus?.emit({
-          type: "round:error",
-          round,
-          error: errorMessage(err),
-          timestamp: Date.now(),
-        });
-        throw new Error(`[Contract:round-${round + 1}] ${errorMessage(err)}`);
+    const accumulated = createMetrics();
+    let proposalInput: TIn | TReview = input;
+    let review: TReview | undefined;
+
+    try {
+      for (let round = 0; round < this.maxRounds; round++) {
+        this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
+
+        try {
+          review = await this.executeRound(round, proposalInput as TIn, accumulated);
+        } catch (err: any) {
+          this.eventBus?.emit({
+            type: "round:error",
+            round,
+            error: errorMessage(err),
+            timestamp: Date.now(),
+          });
+          throw new Error(`[Contract:round-${round + 1}] ${errorMessage(err)}`);
+        }
+
+        if (this.isAccepted(review!)) {
+          this._lastMetrics = { ...accumulated };
+          return this._lastProposal as TProposal;
+        }
+
+        proposalInput = review;
       }
 
-      if (this.isAccepted(review)) {
-        return review;
+      this._lastMetrics = { ...accumulated };
+      return review as TProposal;
+    } finally {
+      if (!this._lastMetrics) {
+        this._lastMetrics = { ...accumulated };
       }
-
-      proposalInput = review;
     }
-
-    return review;
   }
 
-  private async executeRound(round: number, proposalInput: unknown): Promise<unknown> {
-    const proposal = await this.runAgentWithRetry(this.proposer, proposalInput);
-    const proposerCost = this.proposer.lastMetrics?.cost ?? 0;
+  private async executeRound(
+    round: number,
+    proposalInput: TIn,
+    accumulated: MetricsAccumulator,
+  ): Promise<TReview> {
+    const proposal = await runWithOptionalRetry(this.proposer, proposalInput, this.retryPolicy, this.eventBus);
+    this._lastProposal = proposal;
 
-    const review = this.parseReview(await this.runAgentWithRetry(this.reviewer, proposal));
-    const reviewerCost = this.reviewer.lastMetrics?.cost ?? 0;
+    const pm = this.proposer.lastMetrics;
+    accumulateMetrics(accumulated, pm);
 
-    const roundCost = proposerCost + reviewerCost;
+    const review = this.parseReview(await runWithOptionalRetry(this.reviewer, proposal, this.retryPolicy, this.eventBus));
+    this._lastEvaluatorResult = review;
+
+    const rm = this.reviewer.lastMetrics;
+    accumulateMetrics(accumulated, rm);
+
+    const roundCost = (pm?.cost ?? 0) + (rm?.cost ?? 0);
     this.eventBus?.emit({
       type: "round:done",
       round,
@@ -75,22 +109,19 @@ export class Contract implements Runnable {
     return review;
   }
 
-  private async runAgentWithRetry(agent: Runnable, agentInput: unknown): Promise<unknown> {
-    return runWithOptionalRetry(agent, agentInput, this.retryPolicy, this.eventBus);
-  }
-
-  private parseReview(review: unknown): unknown {
-    if (typeof review !== "string") return review;
+  private parseReview(review: unknown): TReview {
+    if (typeof review !== "string") return review as TReview;
     const jsonStr = findJsonString(review);
-    if (!jsonStr) return review;
+    if (!jsonStr) return review as TReview;
     try {
-      return JSON.parse(jsonStr);
+      return JSON.parse(jsonStr) as TReview;
     } catch {
-      return review;
+      return review as TReview;
     }
   }
 
-  private isAccepted(review: unknown): boolean {
+  private isAccepted(review: TReview): boolean {
+    if (this.customIsAccepted) return this.customIsAccepted(review);
     if (review == null || typeof review !== "object") return false;
     const accepted = (review as Record<string, unknown>).accepted;
     return typeof accepted === "boolean" && accepted;

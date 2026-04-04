@@ -1,20 +1,21 @@
 import type { Runnable } from "../types.js";
 import type { EventBus, RetryPolicy, OrchestratorEvent } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
-import { parseTrailingOptions } from "../utils.js";
+import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
 
 export interface PipelineOptions {
   retryPolicy?: RetryPolicy;
   eventBus?: EventBus;
 }
 
-export class Pipeline implements Runnable {
-  private agents: Runnable[];
+export class Pipeline<TIn = unknown, TOut = unknown> implements Runnable<TIn, TOut> {
+  private agents: Runnable<any, any>[];
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
+  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
 
-  constructor(...args: [...Runnable[], PipelineOptions] | Runnable[]) {
-    const { agents, options } = parseTrailingOptions<PipelineOptions>(args);
+  constructor(...args: [...Runnable<any, any>[], PipelineOptions] | Runnable<any, any>[]) {
+    const { agents, options } = parseTrailingOptions<PipelineOptions>(args as any);
 
     if (agents.length === 0) {
       throw new Error("Pipeline requires at least one agent");
@@ -25,19 +26,25 @@ export class Pipeline implements Runnable {
     this.eventBus = options.eventBus ?? null;
   }
 
-  async run(input: unknown): Promise<unknown> {
-    let result = input;
+  get lastMetrics() { return this._lastMetrics; }
+
+  async run(input: TIn): Promise<TOut> {
+    this._lastMetrics = null;
+    const accumulated = createMetrics();
+    let result: unknown = input;
 
     for (let i = 0; i < this.agents.length; i++) {
       result = await this.runStep(this.agents[i], i, result);
+      accumulateMetrics(accumulated, this.agents[i].lastMetrics);
     }
 
+    this._lastMetrics = { ...accumulated };
     this.emitPipelineDone();
 
-    return result;
+    return result as TOut;
   }
 
-  resume(history: OrchestratorEvent[], input: unknown): Promise<unknown> {
+  resume(history: OrchestratorEvent[], input: TIn): Promise<TOut> {
     const { lastCompletedStep, lastOutput } = this.findLastCompletedStep(history, input);
 
     if (lastCompletedStep < 0) {
@@ -46,17 +53,17 @@ export class Pipeline implements Runnable {
 
     const remainingAgents = this.agents.slice(lastCompletedStep + 1);
     if (remainingAgents.length === 0) {
-      return Promise.resolve(lastOutput);
+      return Promise.resolve(lastOutput as TOut);
     }
 
-    const resumePipeline = new Pipeline(...remainingAgents, {
+    const resumePipeline = new Pipeline<unknown, TOut>(...remainingAgents, {
       retryPolicy: this.retryPolicy ?? undefined,
       eventBus: this.eventBus ?? undefined,
     });
     return resumePipeline.run(lastOutput);
   }
 
-  private async runStep(agent: Runnable, stepIndex: number, input: unknown): Promise<unknown> {
+  private async runStep(agent: Runnable<any, any>, stepIndex: number, input: unknown): Promise<unknown> {
     const agentName = agent.name ?? `step-${stepIndex}`;
 
     this.eventBus?.emit({ type: "step:start", step: stepIndex, agent: agentName, timestamp: Date.now() });
@@ -108,4 +115,13 @@ export class Pipeline implements Runnable {
       this.eventBus.emit({ type: "pipeline:done", totalCost: summary.total, timestamp: Date.now() });
     }
   }
+}
+
+export function pipe<A, B>(s1: Runnable<A, B>, options?: PipelineOptions): Pipeline<A, B>;
+export function pipe<A, B, C>(s1: Runnable<A, B>, s2: Runnable<B, C>, options?: PipelineOptions): Pipeline<A, C>;
+export function pipe<A, B, C, D>(s1: Runnable<A, B>, s2: Runnable<B, C>, s3: Runnable<C, D>, options?: PipelineOptions): Pipeline<A, D>;
+export function pipe<A, B, C, D, E>(s1: Runnable<A, B>, s2: Runnable<B, C>, s3: Runnable<C, D>, s4: Runnable<D, E>, options?: PipelineOptions): Pipeline<A, E>;
+export function pipe(...args: any[]): Pipeline<any, any> {
+  const { agents, options } = parseTrailingOptions<PipelineOptions>(args);
+  return new Pipeline(...agents, options);
 }

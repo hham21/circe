@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-export interface Runnable {
+export interface Runnable<TIn = unknown, TOut = unknown> {
   name?: string;
   lastMetrics?: { cost: number; inputTokens: number; outputTokens: number } | null;
-  run(input: unknown): Promise<unknown>;
+  run(input: TIn): Promise<TOut>;
 }
 
 const DEFAULT_MODEL = "claude-opus-4-6";

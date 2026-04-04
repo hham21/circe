@@ -75,3 +75,19 @@ export function parseTrailingOptions<T>(
 function isRunnable(value: unknown): value is Runnable {
   return value != null && typeof value === "object" && "run" in value;
 }
+
+export type MetricsAccumulator = { cost: number; inputTokens: number; outputTokens: number };
+
+export function createMetrics(): MetricsAccumulator {
+  return { cost: 0, inputTokens: 0, outputTokens: 0 };
+}
+
+export function accumulateMetrics(
+  acc: MetricsAccumulator,
+  metrics: { cost: number; inputTokens: number; outputTokens: number } | null | undefined,
+): void {
+  if (!metrics) return;
+  acc.cost += metrics.cost;
+  acc.inputTokens += metrics.inputTokens;
+  acc.outputTokens += metrics.outputTokens;
+}

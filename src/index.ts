@@ -7,7 +7,7 @@ export {
   type OrchestratorEvent,
   type RetryPolicy,
 } from "./events.js";
-export { findJsonString, parseTrailingOptions } from "./utils.js";
+export { findJsonString, parseTrailingOptions, createMetrics, accumulateMetrics, type MetricsAccumulator } from "./utils.js";
 export {
   FeatureSchema,
   TechStackSchema,
@@ -23,6 +23,7 @@ export {
 } from "./handoff.js";
 export {
   Pipeline,
+  pipe,
   Loop,
   Parallel,
   Contract,

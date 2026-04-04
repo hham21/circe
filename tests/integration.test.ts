@@ -42,7 +42,8 @@ describe("integration: nested orchestrators", () => {
     );
 
     const result = await pipeline.run("Build an app");
-    expect((result as any).passed).toBe(true);
+    // Loop returns producer output on stopWhen success
+    expect((result as any).built).toBe(true);
     expect(genCalls).toBe(2);
   });
 
@@ -107,6 +108,8 @@ describe("integration: nested orchestrators", () => {
     const result = await pipeline.run("spec");
     expect(proposerCalls).toBe(1);
     expect(genCalls).toBe(1);
-    expect((result as any).passed).toBe(true);
+    // Contract returns proposal on accepted, Loop returns producer output on stopWhen
+    // Contract proposal goes into Loop as input; Loop returns producer output ("built")
+    expect(result).toBe("built");
   });
 });

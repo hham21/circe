@@ -44,11 +44,6 @@ type EventHandler<T extends OrchestratorEvent["type"]> = (
   event: Extract<OrchestratorEvent, { type: T }>,
 ) => void;
 
-interface HandlerEntry {
-  type: string;
-  handler: (event: any) => void;
-}
-
 interface CostEntry {
   cost: number;
   agent: string;
@@ -173,12 +168,12 @@ export function errorMessage(err: unknown): string {
  * Run a Runnable with optional retry + EventBus retry event emission.
  * Shared by all orchestrators to eliminate duplicated retry wrappers.
  */
-export async function runWithOptionalRetry(
-  agent: { name?: string; run(input: unknown): Promise<unknown> },
-  input: unknown,
+export async function runWithOptionalRetry<TIn, TOut>(
+  agent: { name?: string; run(input: TIn): Promise<TOut> },
+  input: TIn,
   retryPolicy: RetryPolicy | null,
   eventBus: EventBus | null,
-): Promise<unknown> {
+): Promise<TOut> {
   if (!retryPolicy) {
     return agent.run(input);
   }
