@@ -31,7 +31,7 @@ Output JSON: {"accepted": true/false, "feedback": "specific feedback"}`,
 const builder = new BaseAgent({
   name: "builder",
   prompt: `You are a developer. Given a spec (or QA feedback), write a brief implementation plan.
-If input contains "accepted", use the agreed spec to write the plan.
+If input contains "proposal" and "criteria", use the spec to write the plan.
 If input is a QAReport with feedback, revise the plan based on feedback.
 Output ONLY the implementation plan as text.`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],

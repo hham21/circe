@@ -55,7 +55,7 @@ function extractBalancedBraces(text: string, start: number): string | null {
  * Used by Pipeline, Parallel, and Loop.
  */
 export function parseTrailingOptions<T>(
-  args: unknown[],
+  args: any[],
 ): { agents: Runnable[]; options: T } {
   if (args.length === 0) {
     return { agents: [], options: {} as T };
@@ -74,4 +74,22 @@ export function parseTrailingOptions<T>(
 
 function isRunnable(value: unknown): value is Runnable {
   return value != null && typeof value === "object" && "run" in value;
+}
+
+import type { MetricsSnapshot } from "./types.js";
+
+export type MetricsAccumulator = MetricsSnapshot;
+
+export function createMetrics(): MetricsAccumulator {
+  return { cost: 0, inputTokens: 0, outputTokens: 0 };
+}
+
+export function accumulateMetrics(
+  acc: MetricsAccumulator,
+  metrics: MetricsSnapshot | null | undefined,
+): void {
+  if (!metrics) return;
+  acc.cost += metrics.cost;
+  acc.inputTokens += metrics.inputTokens;
+  acc.outputTokens += metrics.outputTokens;
 }

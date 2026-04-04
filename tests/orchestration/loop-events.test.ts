@@ -86,7 +86,8 @@ describe("Loop with RetryPolicy", () => {
     });
 
     const result = await loop.run("spec");
-    expect((result as any).passed).toBe(true);
+    // Loop returns producer output on stopWhen success
+    expect(result).toBe("built");
     expect(genCalls).toBe(2);
 
     const retries = bus.history.filter((e) => e.type === "retry");

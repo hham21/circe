@@ -7,7 +7,7 @@ export {
   type OrchestratorEvent,
   type RetryPolicy,
 } from "./events.js";
-export { findJsonString, parseTrailingOptions } from "./utils.js";
+export { findJsonString, parseTrailingOptions, createMetrics, accumulateMetrics, type MetricsAccumulator } from "./utils.js";
 export {
   FeatureSchema,
   TechStackSchema,
@@ -23,6 +23,7 @@ export {
 } from "./handoff.js";
 export {
   Pipeline,
+  pipe,
   Loop,
   Parallel,
   Contract,
@@ -39,4 +40,4 @@ export { frontendDesign } from "./presets/frontend.js";
 export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
 export { setFormatter, setSkillRegistry, getSkillRegistry } from "./context.js";
-export { RunContextSchema, type RunContext, type Runnable } from "./types.js";
+export { RunContextSchema, type RunContext, type Runnable, type MetricsSnapshot } from "./types.js";

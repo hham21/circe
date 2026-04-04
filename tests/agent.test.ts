@@ -235,6 +235,56 @@ describe("BaseAgent.buildUserPrompt", () => {
   });
 });
 
+describe("BaseAgent outputFormat", () => {
+  it("caches JSON Schema from outputSchema in constructor", () => {
+    const a = new BaseAgent({
+      name: "test",
+      prompt: "",
+      outputSchema: QAReportSchema,
+    });
+    // Access private field via any cast
+    const jsonSchema = (a as any)._jsonSchema;
+    expect(jsonSchema).toBeTruthy();
+    expect(jsonSchema.type).toBe("object");
+    expect(jsonSchema.properties).toBeDefined();
+  });
+
+  it("does not create JSON Schema without outputSchema", () => {
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    expect((a as any)._jsonSchema).toBeNull();
+  });
+
+  it("validates structured output with outputSchema", () => {
+    const a = new BaseAgent({
+      name: "test",
+      prompt: "",
+      outputSchema: QAReportSchema,
+    });
+    const data = { passed: true, scores: { quality: 8 }, feedback: ["Good"] };
+    const result = (a as any).tryParseWithSchema(data);
+    expect(result.passed).toBe(true);
+    expect(result.scores.quality).toBe(8);
+  });
+
+  it("returns data as-is when tryParseWithSchema fails", () => {
+    const a = new BaseAgent({
+      name: "test",
+      prompt: "",
+      outputSchema: QAReportSchema,
+    });
+    const badData = { wrong: "shape" };
+    const result = (a as any).tryParseWithSchema(badData);
+    expect(result).toEqual(badData);
+  });
+
+  it("returns data as-is when no outputSchema in tryParseWithSchema", () => {
+    const a = new BaseAgent({ name: "test", prompt: "" });
+    const data = { any: "data" };
+    const result = (a as any).tryParseWithSchema(data);
+    expect(result).toEqual(data);
+  });
+});
+
 describe("BaseAgent timeout", () => {
   it("stores timeout from config", () => {
     const a = new BaseAgent({ name: "test", prompt: "", timeout: 5000 });

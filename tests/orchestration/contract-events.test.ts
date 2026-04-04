@@ -49,7 +49,8 @@ describe("Contract with RetryPolicy", () => {
       eventBus: bus,
     }).run("spec");
 
-    expect((result as any).accepted).toBe(true);
+    // Contract returns proposal on accepted
+    expect(result).toBe("plan");
     expect(calls).toBe(2);
   });
 });

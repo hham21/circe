@@ -28,7 +28,7 @@ const critic = new BaseAgent({
 Only pass if quality >= 8. Most haikus deserve 4-6.
 Clichés like "leaves falling", "gentle rain" are automatic failures.
 
-Output JSON only:
+Respond with JSON matching this structure:
 {"passed": true/false, "scores": {"quality": N}, "feedback": ["specific feedback"]}`,
   outputSchema: QAReportSchema,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
@@ -53,7 +53,11 @@ const loop = new Loop(writer, critic, {
 });
 const result = await loop.run("autumn rain");
 
-console.log("\nFinal:", JSON.stringify(result, null, 2));
+console.log("\nFinal haiku:", result);
+const evaluation = loop.lastEvaluatorResult as any;
+if (evaluation) {
+  console.log(`Quality: ${evaluation.scores?.quality ?? "?"}/10, Passed: ${evaluation.passed}`);
+}
 console.log("\n--- Metrics ---");
 const cost = bus.getCostSummary();
 console.log(`Total cost: $${cost.total.toFixed(4)}`);

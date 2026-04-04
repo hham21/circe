@@ -1,4 +1,4 @@
-export { Pipeline } from "./pipeline.js";
+export { Pipeline, pipe } from "./pipeline.js";
 export type { PipelineOptions } from "./pipeline.js";
 export { Loop } from "./loop.js";
 export type { LoopOptions } from "./loop.js";

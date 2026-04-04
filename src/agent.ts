@@ -1,6 +1,7 @@
 import { query, createSdkMcpServer, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { ZodSchema } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 import { getFormatter, getWorkDir, getSkillRegistry } from "./context.js";
 import type { Runnable } from "./types.js";
 import { findJsonString, circeHome } from "./utils.js";
@@ -35,7 +36,7 @@ const BYPASS_PERMISSIONS_MODE = "bypassPermissions";
 const SKILL_SERVER_NAME = "circe-skills";
 const INPUT_PREVIEW_MAX_LENGTH = 80;
 
-export class BaseAgent implements Runnable {
+export class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   name: string;
   prompt: string;
   tools: string[] | null;
@@ -51,6 +52,7 @@ export class BaseAgent implements Runnable {
   private timeout: number;
   private sessionId: string | null = null;
   private _lastMetrics: ResultMetrics | null = null;
+  private _jsonSchema: Record<string, unknown> | null = null;
 
   get lastMetrics(): ResultMetrics | null {
     return this._lastMetrics;
@@ -70,6 +72,10 @@ export class BaseAgent implements Runnable {
     this.outputSchema = config.outputSchema ?? null;
     this.costPerMTokens = config.costPerMTokens ?? DEFAULT_COST_PER_M_TOKENS;
     this.timeout = config.timeout ?? 0;
+
+    if (this.outputSchema) {
+      this._jsonSchema = zodToJsonSchema(this.outputSchema) as Record<string, unknown>;
+    }
   }
 
   // --- Public methods ---
@@ -82,7 +88,7 @@ export class BaseAgent implements Runnable {
     return summary ? `${this.prompt}\n\n${summary}` : this.prompt;
   }
 
-  async run(input: unknown): Promise<unknown> {
+  async run(input: TIn): Promise<TOut> {
     this.validateInput(input);
     this.validateSkills();
 
@@ -103,7 +109,7 @@ export class BaseAgent implements Runnable {
     }
   }
 
-  private async executeQuery(input: unknown, abortController?: AbortController): Promise<unknown> {
+  private async executeQuery(input: TIn, abortController?: AbortController): Promise<TOut> {
     const formatter = getFormatter() as any;
     const workDir = getWorkDir();
     formatter?.agentStart?.(this.name, this.prompt.slice(0, 60));
@@ -111,6 +117,7 @@ export class BaseAgent implements Runnable {
     const userPrompt = this.buildUserPrompt(input);
     const options = this.buildSdkOptions(workDir, abortController);
     let metrics: ResultMetrics = { resultText: "", cost: 0, inputTokens: 0, outputTokens: 0 };
+    let structuredOutput: unknown = undefined;
 
     try {
       for await (const message of query({ prompt: userPrompt, options })) {
@@ -118,6 +125,7 @@ export class BaseAgent implements Runnable {
         this.handleAssistantMessage(message, formatter);
         if (message.type === "result") {
           metrics = this.extractResultMetrics(message);
+          structuredOutput = (message as any).structured_output;
         }
       }
     } catch (err: any) {
@@ -126,10 +134,10 @@ export class BaseAgent implements Runnable {
       throw new Error(`[${this.name}] ${err.message}`);
     }
 
-    return this.finalize(metrics, formatter);
+    return this.finalize(metrics, structuredOutput, formatter);
   }
 
-  buildUserPrompt(input: unknown): string {
+  buildUserPrompt(input: TIn): string {
     const workDir = getWorkDir();
     const workDirRule = workDir
       ? `IMPORTANT: Your working directory is ${workDir}. All file operations MUST use this directory. Do NOT cd to other directories.`
@@ -153,10 +161,18 @@ export class BaseAgent implements Runnable {
     if (!jsonStr) return raw;
 
     try {
-      const parsed = JSON.parse(jsonStr);
-      return this.outputSchema.parse(parsed);
+      return this.tryParseWithSchema(JSON.parse(jsonStr));
     } catch {
       return raw;
+    }
+  }
+
+  private tryParseWithSchema(data: unknown): unknown {
+    if (!this.outputSchema) return data;
+    try {
+      return this.outputSchema.parse(data);
+    } catch {
+      return data;
     }
   }
 
@@ -166,7 +182,7 @@ export class BaseAgent implements Runnable {
 
   // --- run() implementation details ---
 
-  private validateInput(input: unknown): void {
+  private validateInput(input: TIn): void {
     if (!this.inputSchema) return;
 
     const result = this.inputSchema.safeParse(input);
@@ -232,17 +248,17 @@ export class BaseAgent implements Runnable {
     return { inputTokens, outputTokens };
   }
 
-  private finalize(metrics: ResultMetrics, formatter: any): unknown {
+  private finalize(metrics: ResultMetrics, structuredOutput: unknown, formatter: any): TOut {
     this._lastMetrics = metrics;
     const { resultText, cost, inputTokens, outputTokens } = metrics;
-    const parsed = this.parseResult(resultText);
+    const parsed = structuredOutput !== undefined ? this.tryParseWithSchema(structuredOutput) : this.parseResult(resultText);
 
     if (formatter?.agentDone) {
       const formattedOutput = typeof parsed === "string" ? this.stripCodeBlock(parsed) : JSON.stringify(parsed);
       formatter.agentDone(this.name, formattedOutput, [inputTokens, outputTokens], cost);
     }
 
-    return parsed;
+    return parsed as TOut;
   }
 
   // --- SDK option builders ---
@@ -274,6 +290,9 @@ export class BaseAgent implements Runnable {
     }
     if (this.continueSession && this.sessionId) {
       options.resume = this.sessionId;
+    }
+    if (this._jsonSchema) {
+      options.outputFormat = { type: "json_schema", schema: this._jsonSchema };
     }
 
     const skillServer = this.skills.length > 0 ? this.buildSkillMcpServer() : null;
@@ -335,8 +354,8 @@ export class BaseAgent implements Runnable {
   }
 }
 
-export function agent(config: AgentConfig): BaseAgent {
-  return new BaseAgent(config);
+export function agent<TOut = string>(config: AgentConfig): BaseAgent<string, TOut> {
+  return new BaseAgent<string, TOut>(config);
 }
 
 const AgentConfigFileSchema = z.object({
