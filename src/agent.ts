@@ -20,6 +20,7 @@ export interface AgentConfig {
   continueSession?: boolean;
   inputSchema?: ZodSchema;
   outputSchema?: ZodSchema;
+  model?: string;
   costPerMTokens?: { input: number; output: number };
   timeout?: number;
 }
@@ -36,7 +37,7 @@ const BYPASS_PERMISSIONS_MODE = "bypassPermissions";
 const SKILL_SERVER_NAME = "circe-skills";
 const INPUT_PREVIEW_MAX_LENGTH = 80;
 
-export class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
+export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   name: string;
   prompt: string;
   tools: string[] | null;
@@ -48,6 +49,7 @@ export class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOu
   continueSession: boolean;
   inputSchema: ZodSchema | null;
   outputSchema: ZodSchema | null;
+  model: string | undefined;
   private costPerMTokens: { input: number; output: number };
   private timeout: number;
   private sessionId: string | null = null;
@@ -70,6 +72,7 @@ export class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOu
     this.continueSession = config.continueSession ?? false;
     this.inputSchema = config.inputSchema ?? null;
     this.outputSchema = config.outputSchema ?? null;
+    this.model = config.model;
     this.costPerMTokens = config.costPerMTokens ?? DEFAULT_COST_PER_M_TOKENS;
     this.timeout = config.timeout ?? 0;
 
@@ -269,6 +272,9 @@ export class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOu
       permissionMode: this.permissionMode,
     };
 
+    if (this.model) {
+      options.model = this.model;
+    }
     if (abortController) {
       options.abortController = abortController;
     }
@@ -354,8 +360,8 @@ export class BaseAgent<TIn = string, TOut = string> implements Runnable<TIn, TOu
   }
 }
 
-export function agent<TOut = string>(config: AgentConfig): BaseAgent<string, TOut> {
-  return new BaseAgent<string, TOut>(config);
+export function agent<TOut = string>(config: AgentConfig): Agent<string, TOut> {
+  return new Agent<string, TOut>(config);
 }
 
 const AgentConfigFileSchema = z.object({
@@ -368,11 +374,12 @@ const AgentConfigFileSchema = z.object({
   contextStrategy: z.enum(["compaction", "reset"]).optional(),
   permissionMode: z.string().optional(),
   continueSession: z.boolean().optional(),
+  model: z.string().optional(),
   costPerMTokens: z.object({ input: z.number(), output: z.number() }).optional(),
   timeout: z.number().optional(),
 });
 
-export async function loadAgent(name: string): Promise<BaseAgent> {
+export async function loadAgent(name: string): Promise<Agent> {
   const home = circeHome();
   const agentPath = `${home}/agents/${name}.json`;
   const { readFileSync } = await import("node:fs");
@@ -397,5 +404,5 @@ export async function loadAgent(name: string): Promise<BaseAgent> {
     throw new Error(`Invalid agent config in ${agentPath}: ${issues}`);
   }
 
-  return new BaseAgent(result.data);
+  return new Agent(result.data);
 }

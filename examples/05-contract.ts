@@ -1,5 +1,5 @@
 // Example 05: Contract
-// Primitives: Contract, BaseAgent
+// Primitives: Contract, Agent
 // Difficulty: Intermediate
 // Estimated cost: ~$0.55 (2-3 rounds)
 //
@@ -7,19 +7,19 @@
 // Different from Loop (03) — both sides have agency here.
 // Compare with 03-loop: Loop has a passive creator, Contract has two active negotiators.
 
-import { BaseAgent, Contract, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Contract, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
-const proposer = new BaseAgent({
+const proposer = new Agent({
   name: "proposer",
   prompt: `You are a project planner. Given a project idea (or reviewer feedback), propose a budget breakdown.
 Output JSON: {"proposal": "budget breakdown description", "criteria": ["testable criterion 1", ...]}`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const reviewer = new BaseAgent({
+const reviewer = new Agent({
   name: "reviewer",
   prompt: `You are a strict budget reviewer. Evaluate the proposal.
 - If every line item has a justification, accept.

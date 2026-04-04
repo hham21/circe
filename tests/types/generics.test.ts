@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { BaseAgent, agent } from "../../src/agent.js";
+import { Agent, agent } from "../../src/agent.js";
 import { Loop, Contract, Pipeline, pipe, Parallel, Sprint } from "../../src/orchestration/index.js";
 import type { Runnable } from "../../src/types.js";
 
@@ -23,9 +23,9 @@ describe("Runnable generics", () => {
     expect(r.name).toBe("test");
   });
 
-  it("BaseAgent defaults to <string, string>", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
-    // Type: BaseAgent<string, string>
+  it("Agent defaults to <string, string>", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    // Type: Agent<string, string>
     type AssertIn = typeof a extends Runnable<string, any> ? true : false;
     const check: AssertIn = true;
     expect(check).toBe(true);

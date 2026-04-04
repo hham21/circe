@@ -1,5 +1,5 @@
 // Example 02: Pipeline
-// Primitives: Pipeline, BaseAgent
+// Primitives: Pipeline, Agent
 // Difficulty: Beginner
 // Estimated cost: ~$0.27
 //
@@ -7,24 +7,24 @@
 // Shows per-step cost breakdown via lastMetrics.
 // See 06-compose for nesting Pipeline with other primitives.
 
-import { BaseAgent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
-const researcher = new BaseAgent({
+const researcher = new Agent({
   name: "researcher",
   prompt: "You are a researcher. Given a topic, write 3 key facts about it. Output ONLY the facts as a numbered list.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const summarizer = new BaseAgent({
+const summarizer = new Agent({
   name: "summarizer",
   prompt: "You are a summarizer. Condense the input into a single sentence. Output ONLY the sentence.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const translator = new BaseAgent({
+const translator = new Agent({
   name: "translator",
   prompt: "Translate the input to Korean. Output ONLY the translation, nothing else.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],

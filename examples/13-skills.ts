@@ -1,14 +1,14 @@
 // Example 13: Skills (Prompt Injection & On-Demand Loading)
-// Primitives: SkillRegistry, BaseAgent
+// Primitives: SkillRegistry, Agent
 // Difficulty: Advanced
 // Estimated cost: ~$0.09
 //
 // Create a SKILL.md, register it, inject into agent prompt, agent loads full content on demand.
-// The MCP server is created internally by BaseAgent — no external setup required.
+// The MCP server is created internally by Agent — no external setup required.
 // Self-contained: creates skill dir, runs agent, cleans up.
 // Skills enhance any agent — combine with any primitive above.
 
-import { BaseAgent, SkillRegistry, setSkillRegistry, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, SkillRegistry, setSkillRegistry, OutputFormatter, setFormatter } from "../src/index.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 
 const verbose = process.argv.includes("--verbose");
@@ -58,7 +58,7 @@ try {
 
   // 2. Show prompt injection
   console.log("\n--- Prompt Injection ---");
-  const agent = new BaseAgent({
+  const agent = new Agent({
     name: "reviewer",
     prompt: "You are a code reviewer.",
     skills: ["code-review"],

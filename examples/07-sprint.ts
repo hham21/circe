@@ -1,5 +1,5 @@
 // Example 07: Sprint
-// Primitives: Sprint, BaseAgent
+// Primitives: Sprint, Agent
 // Difficulty: Intermediate
 // Estimated cost: ~$0.27
 //
@@ -7,12 +7,12 @@
 // Sprint expects input as { sprints: [...definitions] } — each definition
 // is passed to the runner agent sequentially.
 
-import { BaseAgent, Sprint, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Sprint, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
-const copywriter = new BaseAgent({
+const copywriter = new Agent({
   name: "copywriter",
   prompt: `You are a marketing copywriter. Given a product description, write a catchy one-line tagline.
 Output ONLY the tagline, nothing else.`,

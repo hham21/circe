@@ -6,7 +6,7 @@
 // Same task solved 3 different ways. Prints a comparison table.
 // Demonstrates why different orchestration shapes exist — different tradeoffs.
 
-import { BaseAgent, Pipeline, Loop, Contract, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Pipeline, Loop, Contract, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
@@ -16,12 +16,12 @@ const TASK = "Write a product description for a smart water bottle that tracks h
 // --- Approach 1: Pipeline (fast, single-pass) ---
 async function runPipeline(): Promise<{ result: string; cost: number; rounds: number }> {
   const bus = new EventBus();
-  const drafter = new BaseAgent({
+  const drafter = new Agent({
     name: "drafter",
     prompt: "Write a compelling product description in 2-3 sentences. Output ONLY the description.",
     disallowedTools: ["Bash", "Read", "Write", "Edit"],
   });
-  const polisher = new BaseAgent({
+  const polisher = new Agent({
     name: "polisher",
     prompt: "Polish the product description for clarity and impact. Output ONLY the polished version.",
     disallowedTools: ["Bash", "Read", "Write", "Edit"],
@@ -34,13 +34,13 @@ async function runPipeline(): Promise<{ result: string; cost: number; rounds: nu
 // --- Approach 2: Loop (iterative refinement) ---
 async function runLoop(): Promise<{ result: string; cost: number; rounds: number }> {
   const bus = new EventBus();
-  const writer = new BaseAgent({
+  const writer = new Agent({
     name: "writer",
     prompt: `Write (or improve based on feedback) a product description.
 Output ONLY the description text.`,
     disallowedTools: ["Bash", "Read", "Write", "Edit"],
   });
-  const critic = new BaseAgent({
+  const critic = new Agent({
     name: "critic",
     prompt: `Score the description on "quality" (1-10). Pass if >= 8.
 Output JSON: {"passed": true/false, "scores": {"quality": N}, "feedback": ["feedback"]}`,
@@ -60,13 +60,13 @@ Output JSON: {"passed": true/false, "scores": {"quality": N}, "feedback": ["feed
 // --- Approach 3: Contract (negotiated) ---
 async function runContract(): Promise<{ result: string; cost: number; rounds: number }> {
   const bus = new EventBus();
-  const proposer = new BaseAgent({
+  const proposer = new Agent({
     name: "proposer",
     prompt: `Write a product description proposal.
 Output JSON: {"proposal": "description text", "criteria": ["criterion"]}`,
     disallowedTools: ["Bash", "Read", "Write", "Edit"],
   });
-  const reviewer = new BaseAgent({
+  const reviewer = new Agent({
     name: "reviewer",
     prompt: `Review the description. Accept if it's compelling, specific, and concise.
 Output JSON: {"accepted": true/false, "feedback": "feedback"}`,

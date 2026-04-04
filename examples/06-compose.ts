@@ -7,20 +7,20 @@
 // Pipeline where stage 1 is a Contract (negotiate specs) and stage 2 is a Loop (iterative build).
 // You've seen Pipeline (02), Loop (03), Contract (05) individually. Now they compose.
 
-import { BaseAgent, Pipeline, Contract, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Pipeline, Contract, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
 // Phase 1: Contract — negotiate what to build
-const specWriter = new BaseAgent({
+const specWriter = new Agent({
   name: "spec-writer",
   prompt: `You are a product spec writer. Given a product idea (or reviewer feedback), write a brief spec.
 Output JSON: {"proposal": "spec description", "criteria": ["criterion 1", ...]}`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const specReviewer = new BaseAgent({
+const specReviewer = new Agent({
   name: "spec-reviewer",
   prompt: `You are a spec reviewer. Accept if the spec has clear scope, deliverables, and success criteria.
 Output JSON: {"accepted": true/false, "feedback": "specific feedback"}`,
@@ -28,7 +28,7 @@ Output JSON: {"accepted": true/false, "feedback": "specific feedback"}`,
 });
 
 // Phase 2: Loop — iteratively build and refine
-const builder = new BaseAgent({
+const builder = new Agent({
   name: "builder",
   prompt: `You are a developer. Given a spec (or QA feedback), write a brief implementation plan.
 If input contains "proposal" and "criteria", use the spec to write the plan.
@@ -37,7 +37,7 @@ Output ONLY the implementation plan as text.`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const qa = new BaseAgent({
+const qa = new Agent({
   name: "qa",
   prompt: `You are a QA reviewer. Score the implementation plan on "quality" (1-10).
 Pass if quality >= 7. Check for: completeness, feasibility, clear steps.

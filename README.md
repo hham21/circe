@@ -27,15 +27,6 @@ npx tsx examples/06-compose.ts    # the money shot — nested primitives
 
 ## Quick Start
 
-### Using a preset
-
-```bash
-circe run fullstack --preset -i "Build a browser-based DAW"
-circe run frontend-design --preset -i "Dutch art museum website"
-```
-
-### Programmatic usage
-
 ```typescript
 import { Pipeline, Loop, agent } from "circe";
 
@@ -69,7 +60,7 @@ await app.run("Build a retro game maker");
 ### Agents
 
 ```typescript
-import { BaseAgent, agent } from "circe";
+import { Agent, agent } from "circe";
 
 // Factory function (simple)
 const reviewer = agent({
@@ -79,7 +70,7 @@ const reviewer = agent({
 });
 
 // Class (fine-grained control)
-const evaluator = new BaseAgent({
+const evaluator = new Agent({
   name: "evaluator",
   prompt: "Strict QA engineer.",
   tools: ["Read", "Bash"],
@@ -161,12 +152,8 @@ Zod schemas for structured agent-to-agent data passing:
 ## CLI
 
 ```bash
-# Run
-circe run fullstack --preset -i "Build a DAW"
+# Run a workflow file
 circe run workflow.js -i "prompt or spec file"
-
-# Presets
-circe presets
 
 # Agent management
 circe agents create my-reviewer --prompt "Review code." --tools "Read,Grep"
@@ -185,7 +172,7 @@ circe workflows delete my-pipe
 ```
 CLI Layer          circe run, agents, workflows
 Orchestration      Pipeline, Loop, Parallel, Sprint, Contract
-Agent Layer        BaseAgent, agent(), Handoff, Context Strategy
+Agent Layer        Agent, agent(), Handoff, Context Strategy
 Tool Layer         SDK built-ins, tool(), MCP servers, Skills
 ```
 

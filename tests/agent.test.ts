@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { BaseAgent, agent, loadAgent } from "../src/agent.js";
+import { Agent, agent, loadAgent } from "../src/agent.js";
 import { QAReportSchema } from "../src/handoff.js";
 import { setSkillRegistry, setWorkDir } from "../src/context.js";
 import { SkillRegistry } from "../src/tools/skills.js";
@@ -11,9 +11,9 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   query: vi.fn(),
 }));
 
-describe("BaseAgent", () => {
+describe("Agent", () => {
   it("creates with defaults", () => {
-    const a = new BaseAgent({ name: "test", prompt: "You are a tester." });
+    const a = new Agent({ name: "test", prompt: "You are a tester." });
     expect(a.name).toBe("test");
     expect(a.prompt).toBe("You are a tester.");
     expect(a.tools).toBeNull();
@@ -25,7 +25,7 @@ describe("BaseAgent", () => {
   });
 
   it("creates with custom config", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "evaluator",
       prompt: "Evaluate the app.",
       tools: ["Read", "Bash"],
@@ -41,7 +41,7 @@ describe("BaseAgent", () => {
   });
 
   it("creates with custom disallowedTools", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "safe",
       prompt: "No file access.",
       disallowedTools: ["Bash", "Write", "Edit"],
@@ -50,7 +50,7 @@ describe("BaseAgent", () => {
   });
 
   it("builds system prompt without skills", () => {
-    const a = new BaseAgent({ name: "test", prompt: "Base prompt." });
+    const a = new Agent({ name: "test", prompt: "Base prompt." });
     const result = a.buildSystemPrompt();
     expect(result).toBe("Base prompt.");
   });
@@ -60,7 +60,7 @@ describe("BaseAgent", () => {
       promptSummary: (_names: string[]) => "Available skills:\n- qa: Test apps",
     };
     setSkillRegistry(mockRegistry as any);
-    const a = new BaseAgent({ name: "test", prompt: "Base prompt.", skills: ["qa"] });
+    const a = new Agent({ name: "test", prompt: "Base prompt.", skills: ["qa"] });
     const result = a.buildSystemPrompt();
     setSkillRegistry(null);
     expect(result).toContain("Base prompt.");
@@ -68,26 +68,26 @@ describe("BaseAgent", () => {
   });
 
   it("extracts JSON from markdown code block", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const text = 'Here is the result:\n```json\n{"passed": true}\n```';
     const extracted = a.extractJson(text);
     expect(extracted).toBe('{"passed": true}');
   });
 
   it("extracts raw JSON object", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const text = 'Some text {"key": "value"} more text';
     const extracted = a.extractJson(text);
     expect(extracted).toBe('{"key": "value"}');
   });
 
   it("returns null for no JSON", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     expect(a.extractJson("no json here")).toBeNull();
   });
 
   it("parses result with output schema", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       outputSchema: QAReportSchema,
@@ -99,13 +99,13 @@ describe("BaseAgent", () => {
   });
 
   it("returns raw string when no output schema", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const result = a.parseResult("plain text");
     expect(result).toBe("plain text");
   });
 
   it("returns raw string when JSON parsing fails", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       outputSchema: QAReportSchema,
@@ -115,13 +115,13 @@ describe("BaseAgent", () => {
   });
 
   it("estimates cost with default pricing", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const cost = a.estimateCost(1_000_000, 1_000_000);
     expect(cost).toBeCloseTo(90.0);
   });
 
   it("estimates cost with custom costPerMTokens", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       costPerMTokens: { input: 3, output: 15 },
@@ -132,7 +132,7 @@ describe("BaseAgent", () => {
   });
 
   it("stores inputSchema when provided", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       inputSchema: QAReportSchema,
@@ -141,24 +141,24 @@ describe("BaseAgent", () => {
   });
 
   it("inputSchema defaults to null", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     expect(a.inputSchema).toBeNull();
   });
 });
 
 describe("agent factory", () => {
-  it("creates a BaseAgent from config", () => {
+  it("creates a Agent from config", () => {
     const myAgent = agent({
       name: "planner",
       prompt: "Plan the app.",
       tools: ["Read"],
     });
-    expect(myAgent).toBeInstanceOf(BaseAgent);
+    expect(myAgent).toBeInstanceOf(Agent);
     expect(myAgent.name).toBe("planner");
   });
 });
 
-describe("BaseAgent skill integration", () => {
+describe("Agent skill integration", () => {
   let skillsDir: string;
 
   beforeEach(() => {
@@ -204,40 +204,40 @@ describe("BaseAgent skill integration", () => {
   });
 });
 
-describe("BaseAgent.buildUserPrompt", () => {
+describe("Agent.buildUserPrompt", () => {
   afterEach(() => setWorkDir(null));
 
   it("includes workDir rule when set", () => {
     setWorkDir("/tmp/test-project");
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const prompt = a.buildUserPrompt("build an app");
     expect(prompt).toContain("/tmp/test-project");
     expect(prompt).toContain("build an app");
   });
 
   it("includes fallback rule when no workDir", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const prompt = a.buildUserPrompt("build an app");
     expect(prompt).toContain("relative paths");
   });
 
   it("handles null input", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const prompt = a.buildUserPrompt(null);
     expect(prompt).toContain("relative paths");
     expect(prompt).not.toContain("null");
   });
 
   it("stringifies object input as JSON", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const prompt = a.buildUserPrompt({ key: "value" });
     expect(prompt).toContain('"key": "value"');
   });
 });
 
-describe("BaseAgent outputFormat", () => {
+describe("Agent outputFormat", () => {
   it("caches JSON Schema from outputSchema in constructor", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       outputSchema: QAReportSchema,
@@ -250,12 +250,12 @@ describe("BaseAgent outputFormat", () => {
   });
 
   it("does not create JSON Schema without outputSchema", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     expect((a as any)._jsonSchema).toBeNull();
   });
 
   it("validates structured output with outputSchema", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       outputSchema: QAReportSchema,
@@ -267,7 +267,7 @@ describe("BaseAgent outputFormat", () => {
   });
 
   it("returns data as-is when tryParseWithSchema fails", () => {
-    const a = new BaseAgent({
+    const a = new Agent({
       name: "test",
       prompt: "",
       outputSchema: QAReportSchema,
@@ -278,21 +278,21 @@ describe("BaseAgent outputFormat", () => {
   });
 
   it("returns data as-is when no outputSchema in tryParseWithSchema", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     const data = { any: "data" };
     const result = (a as any).tryParseWithSchema(data);
     expect(result).toEqual(data);
   });
 });
 
-describe("BaseAgent timeout", () => {
+describe("Agent timeout", () => {
   it("stores timeout from config", () => {
-    const a = new BaseAgent({ name: "test", prompt: "", timeout: 5000 });
+    const a = new Agent({ name: "test", prompt: "", timeout: 5000 });
     expect(a.timeout).toBe(5000);
   });
 
   it("defaults timeout to 0", () => {
-    const a = new BaseAgent({ name: "test", prompt: "" });
+    const a = new Agent({ name: "test", prompt: "" });
     expect(a.timeout).toBe(0);
   });
 });
@@ -315,7 +315,7 @@ describe("loadAgent", () => {
     const config = { name: "test-agent", prompt: "You are a tester." };
     writeFileSync(join(tmpDir, "agents", "test-agent.json"), JSON.stringify(config));
     const a = await loadAgent("test-agent");
-    expect(a).toBeInstanceOf(BaseAgent);
+    expect(a).toBeInstanceOf(Agent);
     expect(a.name).toBe("test-agent");
   });
 

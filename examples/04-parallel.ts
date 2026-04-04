@@ -1,5 +1,5 @@
 // Example 04: Parallel
-// Primitives: Parallel, BaseAgent
+// Primitives: Parallel, Agent
 // Difficulty: Intermediate
 // Estimated cost: ~$0.18
 //
@@ -8,12 +8,12 @@
 // See 06-compose for Parallel inside a Pipeline.
 
 import type { Runnable } from "../src/index.js";
-import { BaseAgent, Parallel, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Parallel, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
-const optimist = new BaseAgent({
+const optimist = new Agent({
   name: "optimist",
   prompt: "You are an optimist. Give a positive one-sentence take on the topic.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
@@ -27,7 +27,7 @@ const brokenAgent: Runnable & { name: string } = {
   },
 };
 
-const realist = new BaseAgent({
+const realist = new Agent({
   name: "realist",
   prompt: "You are a realist. Give a balanced one-sentence take on the topic.",
   disallowedTools: ["Bash", "Read", "Write", "Edit"],

@@ -1,13 +1,28 @@
 {
-  "name": "circe",
-  "version": "0.2.0",
-  "description": "GAN-style multi-agent framework for application generation",
+  "name": "@hham21/circe",
+  "version": "0.4.0",
+  "description": "GAN-style multi-agent framework for application generation using Claude Agent SDK",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "circe": "dist/cli/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hham21/circe.git"
+  },
+  "keywords": [
+    "claude",
+    "agent",
+    "multi-agent",
+    "gan",
+    "orchestration",
+    "ai",
+    "anthropic"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/hham21/circe#readme",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

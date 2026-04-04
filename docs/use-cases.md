@@ -48,7 +48,7 @@ new Pipeline(
 );
 ```
 
-A Contract phase precedes the build to align on what to build and how to test it. The fullstack preset uses this pattern.
+A Contract phase precedes the build to align on what to build and how to test it.
 
 ```mermaid
 sequenceDiagram

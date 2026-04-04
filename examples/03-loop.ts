@@ -1,5 +1,5 @@
 // Example 03: Loop (GAN Pattern)
-// Primitives: Loop, BaseAgent, QAReportSchema
+// Primitives: Loop, Agent, QAReportSchema
 // Difficulty: Beginner
 // Estimated cost: ~$0.55 (3 rounds max)
 //
@@ -7,13 +7,13 @@
 // This is the GAN pattern — Generator vs Evaluator.
 // See 05-contract for a different adversarial pattern where both sides negotiate.
 
-import { BaseAgent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
+import { Agent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 // Enable verbose output to see full agent responses
 const verbose = process.argv.includes("--verbose");
 if (verbose) setFormatter(new OutputFormatter(true));
 
-const writer = new BaseAgent({
+const writer = new Agent({
   name: "writer",
   prompt: `You are a creative writer.
 If the input is a topic string, write a short haiku about it.
@@ -22,7 +22,7 @@ Output ONLY the haiku, nothing else.`,
   disallowedTools: ["Bash", "Read", "Write", "Edit"],
 });
 
-const critic = new BaseAgent({
+const critic = new Agent({
   name: "critic",
   prompt: `You are a harsh poetry critic. Score on "quality" (1-10).
 Only pass if quality >= 8. Most haikus deserve 4-6.

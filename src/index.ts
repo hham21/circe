@@ -1,4 +1,4 @@
-export { BaseAgent, agent, loadAgent, type ResultMetrics } from "./agent.js";
+export { Agent, Agent as BaseAgent, agent, loadAgent, type ResultMetrics } from "./agent.js";
 export {
   EventBus,
   executeWithRetry,
@@ -35,9 +35,9 @@ export {
   type ContractOptions,
   type SprintOptions,
 } from "./orchestration/index.js";
-export { fullstackApp } from "./presets/fullstack.js";
-export { frontendDesign } from "./presets/frontend.js";
 export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
-export { setFormatter, setSkillRegistry, getSkillRegistry } from "./context.js";
+export { Session, type SessionOptions } from "./session.js";
+export { setFormatter, setWorkDir, setSkillRegistry, getSkillRegistry } from "./context.js";
+export { PLAYWRIGHT_MCP_SERVER } from "./utils.js";
 export { RunContextSchema, type RunContext, type Runnable, type MetricsSnapshot } from "./types.js";
