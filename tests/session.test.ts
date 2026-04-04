@@ -41,9 +41,9 @@ describe("Session constructor", () => {
     expect(session.formatter).not.toBeNull();
   });
 
-  it("sets formatter to null when verbose is false", () => {
+  it("creates non-verbose formatter when verbose is false", () => {
     const session = new Session({ outputDir: tempDir, verbose: false });
-    expect(session.formatter).toBeNull();
+    expect(session.formatter).not.toBeNull();
   });
 
   it("creates SkillRegistry with provided skill dirs", () => {

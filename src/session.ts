@@ -13,7 +13,7 @@ export interface SessionOptions {
 
 export class Session {
   workDir: string;
-  formatter: OutputFormatter | null;
+  formatter: OutputFormatter;
   skillRegistry: SkillRegistry;
   private startTime: number | null = null;
   private endTime: number | null = null;
@@ -22,10 +22,8 @@ export class Session {
     this.workDir = resolve(options.outputDir ?? process.cwd());
     mkdirSync(this.workDir, { recursive: true });
 
-    this.formatter = options.verbose ? new OutputFormatter(true) : null;
-    if (this.formatter) {
-      this.formatter.setLogFile(join(this.workDir, "circe.log"));
-    }
+    this.formatter = new OutputFormatter(options.verbose);
+    this.formatter.setLogFile(join(this.workDir, "circe.log"));
 
     this.skillRegistry = options.skills
       ? new SkillRegistry(options.skills)
@@ -61,7 +59,7 @@ export class Session {
 
   private teardown(): void {
     try {
-      this.formatter?.close();
+      this.formatter.close();
     } catch (err) {
       console.error("[session] teardown error:", err);
     }

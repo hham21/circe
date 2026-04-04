@@ -22,10 +22,13 @@ export async function executeWorkflow(options: {
   const session = new Session({ outputDir: outDir, verbose });
 
   await session.run(async () => {
-    const runner = await loadWorkflowFile(workflow);
-    const result = await runner.run(userInput);
-    session.formatter?.logResult(serializeResult(result));
-    session.formatter?.finalSummary(outDir, session.duration);
+    try {
+      const runner = await loadWorkflowFile(workflow);
+      const result = await runner.run(userInput);
+      session.formatter.logResult(serializeResult(result));
+    } finally {
+      session.formatter.finalSummary(outDir, session.duration);
+    }
   });
 }
 
