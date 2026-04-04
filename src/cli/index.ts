@@ -23,7 +23,7 @@ const program = new Command();
 program
   .name("circe")
   .description("GAN-style multi-agent framework for application generation")
-  .version("0.1.0");
+  .version("0.3.0");
 
 program
   .command("run <workflow>")
