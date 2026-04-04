@@ -16,7 +16,7 @@ export interface ContractOptions<TReview = unknown> {
 
 export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> implements Runnable<TIn, TProposal> {
   name?: string;
-  private proposer: Runnable<TIn, TProposal>;
+  private proposer: Runnable<TIn | TReview, TProposal>;
   private reviewer: Runnable<TProposal, TReview>;
   private maxRounds: number;
   private retryPolicy: RetryPolicy | null;
@@ -26,7 +26,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
   private _lastProposal: TProposal | null = null;
   private _lastEvaluatorResult: TReview | null = null;
 
-  constructor(proposer: Runnable<TIn, TProposal>, reviewer: Runnable<TProposal, TReview>, options?: ContractOptions<TReview>) {
+  constructor(proposer: Runnable<TIn | TReview, TProposal>, reviewer: Runnable<TProposal, TReview>, options?: ContractOptions<TReview>) {
     this.proposer = proposer;
     this.reviewer = reviewer;
     this.maxRounds = options?.maxRounds ?? DEFAULT_MAX_ROUNDS;
@@ -52,7 +52,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
         this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
         try {
-          review = await this.executeRound(round, proposalInput as TIn, accumulated);
+          review = await this.executeRound(round, proposalInput, accumulated);
         } catch (err: any) {
           this.eventBus?.emit({
             type: "round:error",
@@ -82,7 +82,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
 
   private async executeRound(
     round: number,
-    proposalInput: TIn,
+    proposalInput: TIn | TReview,
     accumulated: MetricsAccumulator,
   ): Promise<TReview> {
     const proposal = await runWithOptionalRetry(this.proposer, proposalInput, this.retryPolicy, this.eventBus);

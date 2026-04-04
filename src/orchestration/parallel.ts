@@ -91,7 +91,7 @@ export class Parallel<TIn = unknown, TOut = unknown> implements Runnable<TIn, Pa
         const { name, result } = outcome.value;
         results[name] = { status: "fulfilled", value: result };
       } else {
-        const name = this.agents[i].name ?? String(this.agents[i]);
+        const name = this.agents[i].name ?? `agent-${i}`;
         const errorMsg = outcome.reason?.message ?? String(outcome.reason);
         results[name] = { status: "rejected", error: errorMsg };
         if (!firstError) {
