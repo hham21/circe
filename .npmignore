@@ -12,5 +12,6 @@ src/
 tsconfig.examples.json
 vitest.config.ts
 uv.lock
+tsconfig.json
 TODOS.md
 CLAUDE.md

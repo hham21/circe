@@ -35,8 +35,6 @@ export {
   type ContractOptions,
   type SprintOptions,
 } from "./orchestration/index.js";
-export { fullstackApp } from "./presets/fullstack.js";
-export { frontendDesign } from "./presets/frontend.js";
 export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
 export { setFormatter, setSkillRegistry, getSkillRegistry } from "./context.js";

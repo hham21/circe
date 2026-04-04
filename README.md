@@ -27,15 +27,6 @@ npx tsx examples/06-compose.ts    # the money shot — nested primitives
 
 ## Quick Start
 
-### Using a preset
-
-```bash
-circe run fullstack --preset -i "Build a browser-based DAW"
-circe run frontend-design --preset -i "Dutch art museum website"
-```
-
-### Programmatic usage
-
 ```typescript
 import { Pipeline, Loop, agent } from "circe";
 
@@ -161,12 +152,8 @@ Zod schemas for structured agent-to-agent data passing:
 ## CLI
 
 ```bash
-# Run
-circe run fullstack --preset -i "Build a DAW"
+# Run a workflow file
 circe run workflow.js -i "prompt or spec file"
-
-# Presets
-circe presets
 
 # Agent management
 circe agents create my-reviewer --prompt "Review code." --tools "Read,Grep"

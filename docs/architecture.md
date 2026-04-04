@@ -29,9 +29,6 @@ src/
 ├── tools/                # Tool & skill registry
 │   ├── custom.ts         # tool() decorator
 │   └── skills.ts         # SkillRegistry (SKILL.md discovery)
-├── presets/              # Pre-configured workflows
-│   ├── fullstack.ts      # Full-stack app builder
-│   └── frontend.ts       # Frontend design iteration
 └── session/              # Session persistence
     └── manager.ts        # SessionManager (JSON files)
 ```
@@ -284,15 +281,8 @@ Compaction prevents "context anxiety" — the tendency for agents to terminate e
 ## CLI Usage
 
 ```bash
-# Run with preset
-circe run fullstack --preset -i "Build a memo app"
-circe run frontend-design --preset -i "Minimal portfolio" -r 5
-
-# Run custom workflow
+# Run a workflow file
 circe run workflow.js -i "spec.md" -o ./my-output
-
-# List presets
-circe presets
 
 # Agent management
 circe agents create my-reviewer --prompt "Review code." --tools "Read,Grep"

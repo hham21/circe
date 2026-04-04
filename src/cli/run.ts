@@ -6,27 +6,16 @@ import { SkillRegistry } from "../tools/skills.js";
 
 type RunnerFn = { run: (input: unknown) => Promise<unknown> };
 
-type PresetEntry = {
-  factory: (opts: Record<string, unknown>) => RunnerFn;
-  roundsKwarg: string;
-};
-
-const PRESETS: Record<string, PresetEntry> = {};
 const SLUG_MAX_LENGTH = 50;
-
-export function registerPreset(name: string, entry: PresetEntry): void {
-  PRESETS[name] = entry;
-}
 
 export async function executeWorkflow(options: {
   workflow: string;
   input: string;
   outputDir?: string;
-  preset?: boolean;
   maxRounds?: number;
   verbose?: boolean;
 }): Promise<void> {
-  const { workflow, input: rawInput, outputDir, preset, maxRounds, verbose } = options;
+  const { workflow, input: rawInput, outputDir, maxRounds, verbose } = options;
 
   const userInput = resolveInput(rawInput);
   const workDir = resolveWorkDir(userInput, outputDir);
@@ -35,9 +24,7 @@ export async function executeWorkflow(options: {
   const startTime = Date.now();
 
   try {
-    const runner = preset
-      ? loadPreset(workflow, maxRounds)
-      : await loadWorkflowFile(workflow);
+    const runner = await loadWorkflowFile(workflow);
 
     const result = await runner.run(userInput);
     formatter.logResult(serializeResult(result));
@@ -106,16 +93,6 @@ function teardownContext(): void {
   setFormatter(null);
   setWorkDir(null);
   setSkillRegistry(null);
-}
-
-function loadPreset(name: string, maxRounds?: number): RunnerFn {
-  const presetEntry = PRESETS[name];
-  if (!presetEntry) {
-    throw new Error(`Unknown preset: ${name}. Available: ${Object.keys(PRESETS).join(", ")}`);
-  }
-  const opts: Record<string, unknown> =
-    maxRounds != null ? { [presetEntry.roundsKwarg]: maxRounds } : {};
-  return presetEntry.factory(opts);
 }
 
 async function loadWorkflowFile(path: string): Promise<RunnerFn> {
