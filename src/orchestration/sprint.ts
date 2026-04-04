@@ -2,6 +2,7 @@ import type { Runnable } from "../types.js";
 import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { createMetrics, accumulateMetrics } from "../utils.js";
+import type { MetricsAccumulator } from "../utils.js";
 
 export interface SprintOptions {
   retryPolicy?: RetryPolicy;
@@ -13,7 +14,7 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
   private runner: Runnable<any, TOut>;
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
-  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
 
   constructor(runner: Runnable<any, TOut>, options?: SprintOptions) {
     this.runner = runner;

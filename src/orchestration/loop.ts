@@ -20,7 +20,7 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
   private stopWhen: ((result: TEval) => boolean) | null;
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
-  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
   private _lastProducerResult: TProducer | null = null;
   private _lastEvaluatorResult: TEval | null = null;
 

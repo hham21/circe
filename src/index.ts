@@ -40,4 +40,4 @@ export { frontendDesign } from "./presets/frontend.js";
 export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
 export { setFormatter, setSkillRegistry, getSkillRegistry } from "./context.js";
-export { RunContextSchema, type RunContext, type Runnable } from "./types.js";
+export { RunContextSchema, type RunContext, type Runnable, type MetricsSnapshot } from "./types.js";

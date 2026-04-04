@@ -2,6 +2,7 @@ import type { Runnable } from "../types.js";
 import type { EventBus, RetryPolicy, OrchestratorEvent } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
+import type { MetricsAccumulator } from "../utils.js";
 
 export interface PipelineOptions {
   retryPolicy?: RetryPolicy;
@@ -12,10 +13,10 @@ export class Pipeline<TIn = unknown, TOut = unknown> implements Runnable<TIn, TO
   private agents: Runnable<any, any>[];
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
-  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
 
   constructor(...args: [...Runnable<any, any>[], PipelineOptions] | Runnable<any, any>[]) {
-    const { agents, options } = parseTrailingOptions<PipelineOptions>(args as any);
+    const { agents, options } = parseTrailingOptions<PipelineOptions>(args);
 
     if (agents.length === 0) {
       throw new Error("Pipeline requires at least one agent");
@@ -33,15 +34,21 @@ export class Pipeline<TIn = unknown, TOut = unknown> implements Runnable<TIn, TO
     const accumulated = createMetrics();
     let result: unknown = input;
 
-    for (let i = 0; i < this.agents.length; i++) {
-      result = await this.runStep(this.agents[i], i, result);
-      accumulateMetrics(accumulated, this.agents[i].lastMetrics);
+    try {
+      for (let i = 0; i < this.agents.length; i++) {
+        result = await this.runStep(this.agents[i], i, result);
+        accumulateMetrics(accumulated, this.agents[i].lastMetrics);
+      }
+
+      this._lastMetrics = { ...accumulated };
+      this.emitPipelineDone();
+
+      return result as TOut;
+    } finally {
+      if (!this._lastMetrics) {
+        this._lastMetrics = { ...accumulated };
+      }
     }
-
-    this._lastMetrics = { ...accumulated };
-    this.emitPipelineDone();
-
-    return result as TOut;
   }
 
   resume(history: OrchestratorEvent[], input: TIn): Promise<TOut> {

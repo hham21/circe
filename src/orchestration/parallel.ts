@@ -2,6 +2,7 @@ import type { Runnable } from "../types.js";
 import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
+import type { MetricsAccumulator } from "../utils.js";
 
 export interface ParallelOptions {
   throwOnError?: boolean;
@@ -21,10 +22,10 @@ export class Parallel<TIn = unknown, TOut = unknown> implements Runnable<TIn, Pa
   private throwOnError: boolean;
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
-  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
 
   constructor(...args: [...Runnable<TIn, TOut>[], ParallelOptions] | Runnable<TIn, TOut>[]) {
-    const { agents, options } = parseTrailingOptions<ParallelOptions>(args as any);
+    const { agents, options } = parseTrailingOptions<ParallelOptions>(args);
 
     if (agents.length === 0) {
       throw new Error("Parallel requires at least one agent");

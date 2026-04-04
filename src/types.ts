@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+export type MetricsSnapshot = { cost: number; inputTokens: number; outputTokens: number };
+
 export interface Runnable<TIn = unknown, TOut = unknown> {
   name?: string;
-  lastMetrics?: { cost: number; inputTokens: number; outputTokens: number } | null;
+  lastMetrics?: MetricsSnapshot | null;
   run(input: TIn): Promise<TOut>;
 }
 

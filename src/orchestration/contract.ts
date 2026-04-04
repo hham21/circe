@@ -22,7 +22,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
   private customIsAccepted: ((review: TReview) => boolean) | null = null;
-  private _lastMetrics: { cost: number; inputTokens: number; outputTokens: number } | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
   private _lastProposal: TProposal | null = null;
   private _lastEvaluatorResult: TReview | null = null;
 
