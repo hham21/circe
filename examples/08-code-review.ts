@@ -49,7 +49,11 @@ const loop = new Loop(coder, reviewer, {
 });
 const result = await loop.run("Write a function that validates email addresses using a regex");
 
-console.log("\nFinal:", typeof result === "string" ? result : JSON.stringify(result, null, 2));
+console.log("\nFinal code:", typeof result === "string" ? result : JSON.stringify(result, null, 2));
+const evaluation = loop.lastEvaluatorResult as any;
+if (evaluation) {
+  console.log(`\nReview: quality=${evaluation.scores?.quality ?? "?"}/10, passed=${evaluation.passed}`);
+}
 console.log("\n--- Metrics ---");
 const cost = bus.getCostSummary();
 console.log(`Total cost: $${cost.total.toFixed(4)}`);

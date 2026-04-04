@@ -40,7 +40,11 @@ console.log("=== Example 05: Contract (Budget Proposer ⇄ Reviewer) ===\n");
 const contract = new Contract(proposer, reviewer, { maxRounds: 3, eventBus: bus });
 const result = await contract.run("Build a mobile app for a local coffee shop");
 
-console.log("\nResult:", JSON.stringify(result, null, 2));
+console.log("\nProposal:", JSON.stringify(result, null, 2));
+const review = contract.lastEvaluatorResult as any;
+if (review) {
+  console.log(`Accepted: ${review.accepted}, Feedback: ${review.feedback?.slice(0, 80) ?? ""}`);
+}
 console.log("\n--- Metrics ---");
 const cost = bus.getCostSummary();
 console.log(`Total cost: $${cost.total.toFixed(4)}`);
