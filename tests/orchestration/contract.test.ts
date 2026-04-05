@@ -42,11 +42,13 @@ describe("Contract", () => {
     expect(proposerCalls).toBe(2);
   });
 
-  it("returns last review when max rounds exceeded", async () => {
+  it("returns last proposal when max rounds exceeded", async () => {
     const proposer = { name: "proposer", async run(_: unknown) { return { proposal: "Plan" }; } };
     const reviewer = { name: "reviewer", async run(_: unknown) { return { accepted: false, feedback: "Still bad" }; } };
-    const result = (await new Contract(proposer, reviewer, { maxRounds: 2 }).run("spec")) as any;
-    expect(result.accepted).toBe(false);
+    const contract = new Contract(proposer, reviewer, { maxRounds: 2 });
+    const result = (await contract.run("spec")) as any;
+    expect(result.proposal).toBe("Plan");
+    expect((contract.lastEvaluatorResult as any).accepted).toBe(false);
   });
 
   it("parses accepted from JSON string response", async () => {
@@ -90,13 +92,14 @@ describe("Contract", () => {
     expect(contract.lastEvaluatorResult).toEqual({ accepted: true, score: 9 });
   });
 
-  it("maxRounds returns review", async () => {
+  it("maxRounds returns proposal, evaluator in lastEvaluatorResult", async () => {
     const proposer = new FakeAgentWithMetrics("proposer", { plan: "v1" }, { cost: 0.1, inputTokens: 50, outputTokens: 50 });
     const reviewer = new FakeAgentWithMetrics("reviewer", { accepted: false, feedback: "rejected" }, { cost: 0.05, inputTokens: 30, outputTokens: 20 });
     const contract = new Contract(proposer, reviewer, { maxRounds: 2 });
     const result = (await contract.run("spec")) as any;
 
-    expect(result.accepted).toBe(false);
-    expect(result.feedback).toBe("rejected");
+    expect(result.plan).toBe("v1");
+    expect((contract.lastEvaluatorResult as any).accepted).toBe(false);
+    expect((contract.lastEvaluatorResult as any).feedback).toBe("rejected");
   });
 });

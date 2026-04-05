@@ -53,13 +53,15 @@ describe("Loop", () => {
     expect(eval_.callCount).toBe(2);
   });
 
-  it("runs max rounds when condition never met — returns evaluator output", async () => {
+  it("runs max rounds when condition never met — returns producer output", async () => {
     const gen = new FakeGenerator();
     const eval_ = new FakeEvaluator(999);
     const loop = new Loop(gen, eval_, { maxRounds: 3, stopWhen: (r: any) => r.passed === true });
     const result = (await loop.run("spec")) as any;
-    expect(result.passed).toBe(false);
+    expect(result.built).toBe(true);
+    expect(result.round).toBe(3);
     expect(gen.callCount).toBe(3);
+    expect((loop.lastEvaluatorResult as any).passed).toBe(false);
   });
 
   it("feeds evaluator output back to generator", async () => {
@@ -129,13 +131,14 @@ describe("Loop", () => {
     expect(loop.lastEvaluatorResult).toEqual({ passed: true, score: 95 });
   });
 
-  it("maxRounds returns evaluator output", async () => {
+  it("maxRounds returns producer output, evaluator in lastEvaluatorResult", async () => {
     const producer = new FakeAgentWithMetrics("producer", { code: "v1" }, { cost: 0.1, inputTokens: 50, outputTokens: 50 });
     const evaluator = new FakeAgentWithMetrics("evaluator", { passed: false, feedback: "needs work" }, { cost: 0.05, inputTokens: 30, outputTokens: 20 });
     const loop = new Loop(producer, evaluator, { maxRounds: 2, stopWhen: (r: any) => r.passed === true });
     const result = (await loop.run("spec")) as any;
 
-    expect(result.passed).toBe(false);
-    expect(result.feedback).toBe("needs work");
+    expect(result.code).toBe("v1");
+    expect((loop.lastEvaluatorResult as any).passed).toBe(false);
+    expect((loop.lastEvaluatorResult as any).feedback).toBe("needs work");
   });
 });

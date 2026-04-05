@@ -62,7 +62,7 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
       }
 
       this._lastMetrics = { ...accumulated };
-      return result as TProducer;
+      return this._lastProducerResult as TProducer;
     } finally {
       if (!this._lastMetrics) {
         this._lastMetrics = { ...accumulated };

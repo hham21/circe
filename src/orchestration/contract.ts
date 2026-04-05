@@ -72,7 +72,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
       }
 
       this._lastMetrics = { ...accumulated };
-      return review as TProposal;
+      return this._lastProposal as TProposal;
     } finally {
       if (!this._lastMetrics) {
         this._lastMetrics = { ...accumulated };
