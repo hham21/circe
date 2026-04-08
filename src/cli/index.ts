@@ -22,17 +22,17 @@ program
   .requiredOption("-i, --input <input>", "User input or path to spec file")
   .option("-o, --output <dir>", "Output directory")
   .option("-v, --verbose", "Verbose output")
-  .action(async (workflow: string, opts: RunOptions) => {
+  .action(async (workflow: string, options: RunOptions) => {
     await executeWorkflow({
       workflow,
-      input: opts.input,
-      outputDir: opts.output,
-      verbose: opts.verbose,
+      input: options.input,
+      outputDir: options.output,
+      verbose: options.verbose,
     });
   });
 
 program.addCommand(skillsCommand);
 
-export { program };
-
 program.parse();
+
+export { program };

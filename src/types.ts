@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-export type MetricsSnapshot = { cost: number; inputTokens: number; outputTokens: number };
+export type MetricsSnapshot = {
+  cost: number;
+  inputTokens: number;
+  outputTokens: number;
+};
 
 export interface Runnable<TIn = unknown, TOut = unknown> {
   name?: string;

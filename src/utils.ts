@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { Runnable } from "./types.js";
+import type { MetricsSnapshot, Runnable } from "./types.js";
 
 export function circeHome(): string {
   return process.env.CIRCE_HOME ?? join(process.env.HOME!, ".circe");
@@ -7,12 +7,14 @@ export function circeHome(): string {
 
 export const PLAYWRIGHT_MCP_SERVER = { command: "npx", args: ["@playwright/mcp@latest"] } as const;
 
+// --- JSON extraction ---
+
 const FENCED_CODE_BLOCK_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/;
 
 /**
- * Extract the first JSON string from text.
- * Checks for fenced code blocks first, then bare JSON objects.
- * Returns the raw JSON string (not parsed).
+ * Extracts the first JSON string from text.
+ * Prefers fenced code blocks; falls back to the first bare JSON object.
+ * Returns the raw JSON string without parsing it.
  */
 export function findJsonString(text: string): string | null {
   const codeBlockMatch = text.match(FENCED_CODE_BLOCK_PATTERN);
@@ -22,8 +24,7 @@ export function findJsonString(text: string): string | null {
 
   const start = text.indexOf("{");
   if (start !== -1) {
-    const extracted = extractBalancedBraces(text, start);
-    if (extracted) return extracted;
+    return extractBalancedBraces(text, start);
   }
 
   return null;
@@ -31,15 +32,17 @@ export function findJsonString(text: string): string | null {
 
 function extractBalancedBraces(text: string, start: number): string | null {
   let depth = 0;
-  let inString = false;
-  let escape = false;
+  let isInsideString = false;
+  let isEscaped = false;
 
   for (let i = start; i < text.length; i++) {
     const char = text[i];
-    if (escape) { escape = false; continue; }
-    if (char === "\\") { escape = true; continue; }
-    if (char === '"') { inString = !inString; continue; }
-    if (inString) continue;
+
+    if (isEscaped) { isEscaped = false; continue; }
+    if (char === "\\") { isEscaped = true; continue; }
+    if (char === '"') { isInsideString = !isInsideString; continue; }
+    if (isInsideString) continue;
+
     if (char === "{") depth++;
     if (char === "}") {
       depth--;
@@ -50,9 +53,11 @@ function extractBalancedBraces(text: string, start: number): string | null {
   return null;
 }
 
+// --- Variadic constructor helpers ---
+
 /**
- * Parse a variadic constructor signature where the last arg may be an options object.
- * Used by Pipeline, Parallel, and Loop.
+ * Parses a variadic constructor signature where the last argument may be an
+ * options object. Used by Pipeline, Parallel, and Loop.
  */
 export function parseTrailingOptions<T>(
   args: any[],
@@ -76,7 +81,7 @@ function isRunnable(value: unknown): value is Runnable {
   return value != null && typeof value === "object" && "run" in value;
 }
 
-import type { MetricsSnapshot } from "./types.js";
+// --- Metrics helpers ---
 
 export type MetricsAccumulator = MetricsSnapshot;
 

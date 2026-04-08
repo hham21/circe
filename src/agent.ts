@@ -54,7 +54,7 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   private timeout: number;
   private sessionId: string | null = null;
   private _lastMetrics: ResultMetrics | null = null;
-  private _jsonSchema: Record<string, unknown> | null = null;
+  private outputJsonSchema: Record<string, unknown> | null = null;
 
   get lastMetrics(): ResultMetrics | null {
     return this._lastMetrics;
@@ -77,11 +77,9 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
     this.timeout = config.timeout ?? 0;
 
     if (this.outputSchema) {
-      this._jsonSchema = zodToJsonSchema(this.outputSchema) as Record<string, unknown>;
+      this.outputJsonSchema = zodToJsonSchema(this.outputSchema) as Record<string, unknown>;
     }
   }
-
-  // --- Public methods ---
 
   buildSystemPrompt(): string {
     const registry = getSkillRegistry();
@@ -183,8 +181,6 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
     return (inputTokens * this.costPerMTokens.input + outputTokens * this.costPerMTokens.output) / 1_000_000;
   }
 
-  // --- run() implementation details ---
-
   private validateInput(input: TIn): void {
     if (!this.inputSchema) return;
 
@@ -254,17 +250,20 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   private finalize(metrics: ResultMetrics, structuredOutput: unknown, formatter: any): TOut {
     this._lastMetrics = metrics;
     const { resultText, cost, inputTokens, outputTokens } = metrics;
-    const parsed = structuredOutput !== undefined ? this.tryParseWithSchema(structuredOutput) : this.parseResult(resultText);
+
+    const parsed =
+      structuredOutput !== undefined
+        ? this.tryParseWithSchema(structuredOutput)
+        : this.parseResult(resultText);
 
     if (formatter?.agentDone) {
-      const formattedOutput = typeof parsed === "string" ? this.stripCodeBlock(parsed) : JSON.stringify(parsed);
+      const formattedOutput =
+        typeof parsed === "string" ? this.stripCodeBlock(parsed) : JSON.stringify(parsed);
       formatter.agentDone(this.name, formattedOutput, [inputTokens, outputTokens], cost);
     }
 
     return parsed as TOut;
   }
-
-  // --- SDK option builders ---
 
   private buildSdkOptions(workDir: string | null, abortController?: AbortController): Record<string, unknown> {
     const options: Record<string, unknown> = {
@@ -272,16 +271,32 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
       permissionMode: this.permissionMode,
     };
 
+    this.applyModelOptions(options, abortController);
+    this.applyPermissionOptions(options);
+    this.applyToolOptions(options);
+    this.applySessionOptions(options, workDir);
+    this.applyOutputFormatOption(options);
+    this.applySkillServerOption(options);
+
+    return options;
+  }
+
+  private applyModelOptions(options: Record<string, unknown>, abortController?: AbortController): void {
     if (this.model) {
       options.model = this.model;
     }
     if (abortController) {
       options.abortController = abortController;
     }
+  }
 
+  private applyPermissionOptions(options: Record<string, unknown>): void {
     if (this.permissionMode === BYPASS_PERMISSIONS_MODE) {
       options.allowDangerouslySkipPermissions = true;
     }
+  }
+
+  private applyToolOptions(options: Record<string, unknown>): void {
     if (this.tools) {
       options.allowedTools = this.tools;
     }
@@ -291,23 +306,31 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
     if (Object.keys(this.mcpServers).length > 0) {
       options.mcpServers = this.mcpServers;
     }
+  }
+
+  private applySessionOptions(options: Record<string, unknown>, workDir: string | null): void {
     if (workDir) {
       options.cwd = workDir;
     }
     if (this.continueSession && this.sessionId) {
       options.resume = this.sessionId;
     }
-    if (this._jsonSchema) {
-      options.outputFormat = { type: "json_schema", schema: this._jsonSchema };
-    }
+  }
 
-    const skillServer = this.skills.length > 0 ? this.buildSkillMcpServer() : null;
-    if (skillServer) {
-      const existingServers = (options.mcpServers as Record<string, unknown>) ?? {};
-      options.mcpServers = { ...existingServers, [SKILL_SERVER_NAME]: skillServer };
+  private applyOutputFormatOption(options: Record<string, unknown>): void {
+    if (this.outputJsonSchema) {
+      options.outputFormat = { type: "json_schema", schema: this.outputJsonSchema };
     }
+  }
 
-    return options;
+  private applySkillServerOption(options: Record<string, unknown>): void {
+    if (this.skills.length === 0) return;
+
+    const skillServer = this.buildSkillMcpServer();
+    if (!skillServer) return;
+
+    const existingServers = (options.mcpServers as Record<string, unknown>) ?? {};
+    options.mcpServers = { ...existingServers, [SKILL_SERVER_NAME]: skillServer };
   }
 
   private buildSkillMcpServer() {
@@ -331,18 +354,11 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
     registry: NonNullable<ReturnType<typeof getSkillRegistry>>,
     skillName: string
   ): { content: Array<{ type: "text"; text: string }> } {
-    const content = registry.getSkill(skillName);
-    if (content) {
-      console.error(`[skill] Loaded: ${skillName}`);
-      return { content: [{ type: "text" as const, text: content }] };
-    }
-    console.error(`[skill] Not found: ${skillName}`);
-    return {
-      content: [{ type: "text" as const, text: `Skill '${skillName}' not found. Continuing without it.` }],
-    };
+    const skillContent = registry.getSkill(skillName);
+    const text = skillContent ?? `Skill '${skillName}' not found. Continuing without it.`;
+    console.error(skillContent ? `[skill] Loaded: ${skillName}` : `[skill] Not found: ${skillName}`);
+    return { content: [{ type: "text" as const, text }] };
   }
-
-  // --- Output formatting helpers ---
 
   private stripCodeBlock(text: string): string {
     const match = text.match(/```(?:\w*)\s*\n([\s\S]*?)\n```/);
@@ -384,21 +400,21 @@ export async function loadAgent(name: string): Promise<Agent> {
   const agentPath = `${home}/agents/${name}.json`;
   const { readFileSync } = await import("node:fs");
 
-  let raw: string;
+  let fileContent: string;
   try {
-    raw = readFileSync(agentPath, "utf-8");
+    fileContent = readFileSync(agentPath, "utf-8");
   } catch {
     throw new Error(`Agent file not found: ${agentPath}`);
   }
 
-  let parsed: unknown;
+  let parsedJson: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsedJson = JSON.parse(fileContent);
   } catch {
     throw new Error(`Invalid JSON in agent file: ${agentPath}`);
   }
 
-  const result = AgentConfigFileSchema.safeParse(parsed);
+  const result = AgentConfigFileSchema.safeParse(parsedJson);
   if (!result.success) {
     const issues = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
     throw new Error(`Invalid agent config in ${agentPath}: ${issues}`);

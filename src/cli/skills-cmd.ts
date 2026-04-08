@@ -1,11 +1,15 @@
 import { Command } from "commander";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SkillInfo } from "../tools/skills.js";
 import { SkillRegistry } from "../tools/skills.js";
 import { circeHome } from "../utils.js";
 
 const SKILL_NAME_COL_WIDTH = 16;
 const SKILL_DESC_COL_WIDTH = 40;
+
+const LOCAL_SKILLS_DIR = join(process.cwd(), ".circe", "skills");
+const GLOBAL_SKILLS_DIR = join(circeHome(), "skills");
 
 export const skillsCommand = new Command("skills").description("Manage skills");
 
@@ -76,21 +80,18 @@ skillsCommand
   });
 
 function createRegistry(): SkillRegistry {
-  return new SkillRegistry([localSkillsDir(), globalSkillsDir()]);
+  return new SkillRegistry([LOCAL_SKILLS_DIR, GLOBAL_SKILLS_DIR]);
 }
 
 function resolveBaseDir(isGlobal: boolean | undefined): string {
-  return isGlobal ? globalSkillsDir() : localSkillsDir();
+  return isGlobal ? GLOBAL_SKILLS_DIR : LOCAL_SKILLS_DIR;
 }
 
 function resolveSkillScope(sourceDir: string): "local" | "global" {
-  return sourceDir === localSkillsDir() ? "local" : "global";
+  return sourceDir === LOCAL_SKILLS_DIR ? "local" : "global";
 }
 
-function printSkillInfo(
-  info: { name: string; description: string; source: string },
-  content: string | null | undefined
-): void {
+function printSkillInfo(info: SkillInfo, content: string | null | undefined): void {
   const scope = resolveSkillScope(info.source);
   console.log(`Name:        ${info.name}`);
   console.log(`Description: ${info.description}`);
@@ -100,14 +101,15 @@ function printSkillInfo(
 }
 
 function buildSkillTemplate(name: string): string {
-  return `---\nname: ${name}\ndescription: \n---\n\n# ${name}\n\n(Write your skill content here)\n`;
-}
-
-function localSkillsDir(): string {
-  return join(process.cwd(), ".circe", "skills");
-}
-
-function globalSkillsDir(): string {
-  const home = circeHome();
-  return join(home, "skills");
+  return [
+    "---",
+    `name: ${name}`,
+    "description: ",
+    "---",
+    "",
+    `# ${name}`,
+    "",
+    "(Write your skill content here)",
+    "",
+  ].join("\n");
 }

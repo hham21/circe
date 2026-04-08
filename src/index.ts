@@ -7,7 +7,14 @@ export {
   type OrchestratorEvent,
   type RetryPolicy,
 } from "./events.js";
-export { findJsonString, parseTrailingOptions, createMetrics, accumulateMetrics, type MetricsAccumulator } from "./utils.js";
+export {
+  findJsonString,
+  parseTrailingOptions,
+  createMetrics,
+  accumulateMetrics,
+  PLAYWRIGHT_MCP_SERVER,
+  type MetricsAccumulator,
+} from "./utils.js";
 export {
   FeatureSchema,
   TechStackSchema,
@@ -39,5 +46,4 @@ export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
 export { Session, type SessionOptions } from "./session.js";
 export { setFormatter, setWorkDir, setSkillRegistry, getSkillRegistry } from "./context.js";
-export { PLAYWRIGHT_MCP_SERVER } from "./utils.js";
 export { RunContextSchema, type RunContext, type Runnable, type MetricsSnapshot } from "./types.js";
