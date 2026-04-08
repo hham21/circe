@@ -43,21 +43,27 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
     const accumulated = createMetrics();
     let proposalInput: TIn | TReview = input;
 
-    for (let round = 0; round < this.maxRounds; round++) {
-      this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
+    try {
+      for (let round = 0; round < this.maxRounds; round++) {
+        this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
-      const review = await this.executeRound(round, proposalInput, accumulated);
+        const review = await this.executeRound(round, proposalInput, accumulated);
 
-      if (this.isAccepted(review)) {
-        this._lastMetrics = { ...accumulated };
-        return this._lastProposal as TProposal;
+        if (this.isAccepted(review)) {
+          this._lastMetrics = { ...accumulated };
+          return this._lastProposal as TProposal;
+        }
+
+        proposalInput = review;
       }
 
-      proposalInput = review;
+      this._lastMetrics = { ...accumulated };
+      return this._lastProposal as TProposal;
+    } finally {
+      if (!this._lastMetrics) {
+        this._lastMetrics = { ...accumulated };
+      }
     }
-
-    this._lastMetrics = { ...accumulated };
-    return this._lastProposal as TProposal;
   }
 
   private resetState(): void {
