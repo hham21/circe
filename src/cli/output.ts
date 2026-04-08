@@ -14,7 +14,6 @@ const AGENT_COLORS: Record<string, (s: string) => string> = {
 
 const AGENT_LABEL_WIDTH = 14;
 const RESULT_PREVIEW_MAX_LENGTH = 50;
-const FEEDBACK_PREVIEW_MAX_LENGTH = 60;
 const TOKEN_COMPACT_THRESHOLD = 1000;
 
 function formatTokenCount(n: number): string {
@@ -78,18 +77,6 @@ export class OutputFormatter {
     this.writeLog(`[result] ${result}`);
   }
 
-  logRoundResult(result: unknown): void {
-    if (result == null || typeof result !== "object") return;
-    const r = result as Record<string, unknown>;
-
-    const roundParts = this.buildRoundResultParts(r);
-    if (roundParts.length === 0) return;
-
-    const line = `  → ${roundParts.join("  ")}`;
-    console.log(line);
-    this.writeLog(line);
-  }
-
   finalSummary(outputDir: string, totalDuration: number): void {
     const duration = this.formatDuration(totalDuration);
     console.log(chalk.bold(`\nOutput: ${outputDir}`));
@@ -97,7 +84,7 @@ export class OutputFormatter {
     this.writeLog(`\nOutput: ${outputDir}\nDuration: ${duration}`);
   }
 
-  formatDuration(seconds: number): string {
+  private formatDuration(seconds: number): string {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
@@ -122,29 +109,6 @@ export class OutputFormatter {
     if (cost != null) {
       parts.push(chalk.yellow(`$${cost.toFixed(4)}`));
     }
-    return parts;
-  }
-
-  private buildRoundResultParts(r: Record<string, unknown>): string[] {
-    const parts: string[] = [];
-
-    if ("passed" in r) {
-      parts.push(r.passed ? chalk.green("PASS") : chalk.red("FAIL"));
-    }
-    if ("accepted" in r) {
-      parts.push(r.accepted ? chalk.green("ACCEPTED") : chalk.red("REJECTED"));
-    }
-    if ("scores" in r && typeof r.scores === "object" && r.scores) {
-      const scores = Object.entries(r.scores as Record<string, number>)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(", ");
-      parts.push(chalk.gray(scores));
-    }
-    if ("feedback" in r && Array.isArray(r.feedback) && r.feedback.length > 0) {
-      const firstFeedback = String(r.feedback[0]);
-      parts.push(chalk.dim(truncate(firstFeedback, FEEDBACK_PREVIEW_MAX_LENGTH, "...")));
-    }
-
     return parts;
   }
 

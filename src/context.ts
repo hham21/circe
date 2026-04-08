@@ -1,32 +1,40 @@
 import type { OutputFormatter } from "./cli/output.js";
-import type { SkillRegistry } from "./tools/skills.js";
+import type { Session } from "./session.js";
 import { sessionStore } from "./session.js";
+import type { SkillRegistry } from "./tools/skills.js";
 
-// Module-level singletons shared across the agent session (legacy fallback)
-let formatter: OutputFormatter | null = null;
-let workDir: string | null = null;
-let skillRegistry: SkillRegistry | null = null;
+// Global fallbacks used when no AsyncLocalStorage session is active.
+let globalFormatter: OutputFormatter | null = null;
+let globalWorkDir: string | null = null;
+let globalSkillRegistry: SkillRegistry | null = null;
+
+function resolveFromSession<K extends keyof Session>(
+  key: K,
+  globalFallback: Session[K] | null,
+): Session[K] | null {
+  return sessionStore.getStore()?.[key] ?? globalFallback;
+}
 
 export function setFormatter(value: OutputFormatter | null): void {
-  formatter = value;
+  globalFormatter = value;
 }
 
 export function getFormatter(): OutputFormatter | null {
-  return sessionStore.getStore()?.formatter ?? formatter;
+  return resolveFromSession("formatter", globalFormatter);
 }
 
 export function setWorkDir(value: string | null): void {
-  workDir = value;
+  globalWorkDir = value;
 }
 
 export function getWorkDir(): string | null {
-  return sessionStore.getStore()?.workDir ?? workDir;
+  return resolveFromSession("workDir", globalWorkDir);
 }
 
 export function setSkillRegistry(value: SkillRegistry | null): void {
-  skillRegistry = value;
+  globalSkillRegistry = value;
 }
 
 export function getSkillRegistry(): SkillRegistry | null {
-  return sessionStore.getStore()?.skillRegistry ?? skillRegistry;
+  return resolveFromSession("skillRegistry", globalSkillRegistry);
 }

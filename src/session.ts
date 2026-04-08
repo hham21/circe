@@ -19,15 +19,9 @@ export class Session {
   private endTime: number | null = null;
 
   constructor(options: SessionOptions = {}) {
-    this.workDir = resolve(options.outputDir ?? process.cwd());
-    mkdirSync(this.workDir, { recursive: true });
-
-    this.formatter = new OutputFormatter(options.verbose);
-    this.formatter.setLogFile(join(this.workDir, "circe.log"));
-
-    this.skillRegistry = options.skills
-      ? new SkillRegistry(options.skills)
-      : this.createDefaultSkillRegistry();
+    this.workDir = this.initWorkDir(options.outputDir);
+    this.formatter = this.initFormatter(options.verbose);
+    this.skillRegistry = this.initSkillRegistry(options.skills);
   }
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
@@ -49,12 +43,29 @@ export class Session {
     return (end - this.startTime) / 1000;
   }
 
+  private initWorkDir(outputDir?: string): string {
+    const workDir = resolve(outputDir ?? process.cwd());
+    mkdirSync(workDir, { recursive: true });
+    return workDir;
+  }
+
+  private initFormatter(verbose?: boolean): OutputFormatter {
+    const formatter = new OutputFormatter(verbose);
+    formatter.setLogFile(join(this.workDir, "circe.log"));
+    return formatter;
+  }
+
+  private initSkillRegistry(skills?: string[]): SkillRegistry {
+    if (skills) return new SkillRegistry(skills);
+    return this.createDefaultSkillRegistry();
+  }
+
   private createDefaultSkillRegistry(): SkillRegistry {
-    const dirs = [
+    const skillDirectories = [
       join(this.workDir, ".circe", "skills"),
       join(circeHome(), "skills"),
     ];
-    return new SkillRegistry(dirs);
+    return new SkillRegistry(skillDirectories);
   }
 
   private teardown(): void {

@@ -77,10 +77,10 @@ export interface EventBusOptions {
 
 export class EventBus {
   history: OrchestratorEvent[] = [];
-  private handlerMap: Map<string, Array<(event: any) => void>> = new Map();
+  private handlersByType: Map<string, Array<(event: any) => void>> = new Map();
   private maxCost: number | null;
   private runningCost = 0;
-  private perAgentCost: Record<string, number> = {};
+  private costByAgent: Record<string, number> = {};
 
   constructor(options?: EventBusOptions) {
     this.maxCost = options?.maxCost ?? null;
@@ -90,40 +90,49 @@ export class EventBus {
     type: T,
     handler: EventHandler<T>,
   ): void {
-    const list = this.handlerMap.get(type) ?? [];
-    list.push(handler);
-    this.handlerMap.set(type, list);
+    const existing = this.handlersByType.get(type) ?? [];
+    this.handlersByType.set(type, [...existing, handler]);
   }
 
   emit(event: OrchestratorEvent): void {
     this.history.push(event);
+    this.trackCost(event);
+    this.dispatchToHandlers(event);
+  }
 
+  getCostSummary(): { total: number; perAgent: Record<string, number> } {
+    return { total: this.runningCost, perAgent: { ...this.costByAgent } };
+  }
+
+  private trackCost(event: OrchestratorEvent): void {
     const costEntry = extractCostEntry(event);
-    if (costEntry) {
-      this.runningCost += costEntry.cost;
-      this.perAgentCost[costEntry.agent] = (this.perAgentCost[costEntry.agent] ?? 0) + costEntry.cost;
+    if (!costEntry) {
+      return;
     }
+
+    this.runningCost += costEntry.cost;
+    this.costByAgent[costEntry.agent] = (this.costByAgent[costEntry.agent] ?? 0) + costEntry.cost;
 
     if (this.maxCost != null && this.runningCost > this.maxCost) {
       throw new Error(
         `Cost limit exceeded: $${this.runningCost.toFixed(2)} spent, limit is $${this.maxCost.toFixed(2)}`,
       );
     }
-
-    const handlers = this.handlerMap.get(event.type);
-    if (handlers) {
-      for (const handler of handlers) {
-        try {
-          handler(event);
-        } catch (err) {
-          console.error(`[EventBus] handler error for ${event.type}:`, err);
-        }
-      }
-    }
   }
 
-  getCostSummary(): { total: number; perAgent: Record<string, number> } {
-    return { total: this.runningCost, perAgent: { ...this.perAgentCost } };
+  private dispatchToHandlers(event: OrchestratorEvent): void {
+    const handlers = this.handlersByType.get(event.type);
+    if (!handlers) {
+      return;
+    }
+
+    for (const handler of handlers) {
+      try {
+        handler(event);
+      } catch (err) {
+        console.error(`[EventBus] handler error for ${event.type}:`, err);
+      }
+    }
   }
 }
 
@@ -165,7 +174,7 @@ export function errorMessage(err: unknown): string {
 }
 
 /**
- * Run a Runnable with optional retry + EventBus retry event emission.
+ * Run an agent with optional retry and EventBus retry event emission.
  * Shared by all orchestrators to eliminate duplicated retry wrappers.
  */
 export async function runWithOptionalRetry<TIn, TOut>(
@@ -200,7 +209,7 @@ export async function executeWithRetry<T>(
 ): Promise<T> {
   const shouldRetry = policy.shouldRetry ?? defaultShouldRetry;
   const backoff = policy.backoff ?? defaultBackoff;
-  let lastError: Error | null = null;
+  let lastError!: Error;
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
     try {
@@ -220,5 +229,5 @@ export async function executeWithRetry<T>(
     }
   }
 
-  throw lastError!;
+  throw lastError;
 }

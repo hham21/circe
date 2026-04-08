@@ -243,7 +243,7 @@ describe("Agent outputFormat", () => {
       outputSchema: QAReportSchema,
     });
     // Access private field via any cast
-    const jsonSchema = (a as any)._jsonSchema;
+    const jsonSchema = (a as any).outputJsonSchema;
     expect(jsonSchema).toBeTruthy();
     expect(jsonSchema.type).toBe("object");
     expect(jsonSchema.properties).toBeDefined();
@@ -251,7 +251,7 @@ describe("Agent outputFormat", () => {
 
   it("does not create JSON Schema without outputSchema", () => {
     const a = new Agent({ name: "test", prompt: "" });
-    expect((a as any)._jsonSchema).toBeNull();
+    expect((a as any).outputJsonSchema).toBeNull();
   });
 
   it("validates structured output with outputSchema", () => {

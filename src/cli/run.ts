@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Session } from "../session.js";
 
-type RunnerFn = { run: (input: unknown) => Promise<unknown> };
+type WorkflowRunner = { run: (input: unknown) => Promise<unknown> };
 
 const SLUG_MAX_LENGTH = 50;
 
@@ -50,8 +50,8 @@ export function resolveInput(input: string): string {
 }
 
 export function findUniqueOutputDir(base: string, slug: string): string {
-  const target = join(base, slug);
-  if (!existsSync(target)) return target;
+  const preferred = join(base, slug);
+  if (!existsSync(preferred)) return preferred;
 
   let counter = 1;
   while (existsSync(join(base, `${slug}-${counter}`))) {
@@ -60,11 +60,13 @@ export function findUniqueOutputDir(base: string, slug: string): string {
   return join(base, `${slug}-${counter}`);
 }
 
-async function loadWorkflowFile(path: string): Promise<RunnerFn> {
+async function loadWorkflowFile(path: string): Promise<WorkflowRunner> {
   const mod = await import(resolve(path));
   if (typeof mod.default?.run === "function") return mod.default;
   if (typeof mod.app?.run === "function") return mod.app;
-  throw new Error(`Workflow file must export 'default' or 'app' with a run() method: ${path}`);
+  throw new Error(
+    `Workflow file must export 'default' or 'app' with a run() method: ${path}`,
+  );
 }
 
 function serializeResult(result: unknown): string {

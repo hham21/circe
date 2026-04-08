@@ -42,38 +42,41 @@ export class Parallel<TIn = unknown, TOut = unknown> implements Runnable<TIn, Pa
   async run(input: TIn): Promise<ParallelResult<TOut>> {
     this._lastMetrics = null;
 
-    const settledOutcomes = await Promise.allSettled(
+    const settledResults = await Promise.allSettled(
       this.agents.map((agent, index) => this.runAgent(agent, input, index)),
     );
 
-    const accumulated = createMetrics();
-    for (const a of this.agents) accumulateMetrics(accumulated, a.lastMetrics);
-    this._lastMetrics = accumulated;
+    this._lastMetrics = this.accumulateAgentMetrics();
 
-    return this.collectResults(settledOutcomes);
+    return this.collectResults(settledResults);
+  }
+
+  private accumulateAgentMetrics(): MetricsAccumulator {
+    const metrics = createMetrics();
+    for (const agent of this.agents) accumulateMetrics(metrics, agent.lastMetrics);
+    return metrics;
   }
 
   private async runAgent(agent: Runnable<TIn, TOut>, input: TIn, index: number): Promise<{ name: string; result: TOut }> {
-    const name = agent.name ?? `agent-${index}`;
-    this.eventBus?.emit({ type: "branch:start", branch: name, timestamp: Date.now() });
+    const agentName = agent.name ?? `agent-${index}`;
+    this.eventBus?.emit({ type: "branch:start", branch: agentName, timestamp: Date.now() });
 
     try {
       const result = await runWithOptionalRetry(agent, input, this.retryPolicy, this.eventBus);
 
-      const metrics = agent.lastMetrics;
       this.eventBus?.emit({
         type: "branch:done",
-        branch: name,
+        branch: agentName,
         result,
-        cost: metrics?.cost,
+        cost: agent.lastMetrics?.cost,
         timestamp: Date.now(),
       });
 
-      return { name, result };
+      return { name: agentName, result };
     } catch (err) {
       this.eventBus?.emit({
         type: "branch:error",
-        branch: name,
+        branch: agentName,
         error: errorMessage(err),
         timestamp: Date.now(),
       });
@@ -82,27 +85,27 @@ export class Parallel<TIn = unknown, TOut = unknown> implements Runnable<TIn, Pa
   }
 
   private collectResults(
-    settledOutcomes: PromiseSettledResult<{ name: string; result: TOut }>[],
+    settledResults: PromiseSettledResult<{ name: string; result: TOut }>[],
   ): ParallelResult<TOut> {
     const results: ParallelResult<TOut> = {};
-    let firstError: Error | null = null;
+    let firstRejectionError: Error | null = null;
 
-    for (const [i, outcome] of settledOutcomes.entries()) {
+    for (const [i, outcome] of settledResults.entries()) {
       if (outcome.status === "fulfilled") {
         const { name, result } = outcome.value;
         results[name] = { status: "fulfilled", value: result };
       } else {
-        const name = this.agents[i].name ?? `agent-${i}`;
+        const agentName = this.agents[i].name ?? `agent-${i}`;
         const errorMsg = outcome.reason?.message ?? String(outcome.reason);
-        results[name] = { status: "rejected", error: errorMsg };
-        if (!firstError) {
-          firstError = outcome.reason instanceof Error ? outcome.reason : new Error(errorMsg);
+        results[agentName] = { status: "rejected", error: errorMsg };
+        if (!firstRejectionError) {
+          firstRejectionError = outcome.reason instanceof Error ? outcome.reason : new Error(errorMsg);
         }
       }
     }
 
-    if (this.throwOnError && firstError) {
-      throw firstError;
+    if (this.throwOnError && firstRejectionError) {
+      throw firstRejectionError;
     }
 
     return results;

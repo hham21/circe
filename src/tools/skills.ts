@@ -10,17 +10,17 @@ export interface SkillInfo {
 }
 
 export class SkillRegistry {
-  private dirs: string[];
+  private searchDirs: string[];
 
   constructor(dirs: string[]) {
-    this.dirs = dirs;
+    this.searchDirs = dirs;
   }
 
   listSkills(): SkillInfo[] {
     const visitedNames = new Set<string>();
     const skills: SkillInfo[] = [];
 
-    for (const dir of this.dirs) {
+    for (const dir of this.searchDirs) {
       this.collectSkillsFromDir(dir, visitedNames, skills);
     }
 
@@ -28,7 +28,7 @@ export class SkillRegistry {
   }
 
   getSkillInfo(name: string): SkillInfo | null {
-    for (const dir of this.dirs) {
+    for (const dir of this.searchDirs) {
       const skill = this.readSkillInfoFromDir(dir, name);
       if (skill) return skill;
     }
@@ -36,7 +36,7 @@ export class SkillRegistry {
   }
 
   getSkill(name: string): string | null {
-    for (const dir of this.dirs) {
+    for (const dir of this.searchDirs) {
       const skillFilePath = this.buildSkillFilePath(dir, name);
       if (!existsSync(skillFilePath)) continue;
       return readFileSync(skillFilePath, "utf-8");
@@ -44,21 +44,21 @@ export class SkillRegistry {
     return null;
   }
 
+  promptSummary(names: string[]): string {
+    const skillSummaryLines = names
+      .map((name) => this.getSkillInfo(name))
+      .filter((info): info is SkillInfo => info !== null)
+      .map((info) => `- ${info.name}: ${info.description}`);
+
+    if (skillSummaryLines.length === 0) return "";
+    return `Available skills (call mcp__circe-skills__use_skill to load full methodology):\n${skillSummaryLines.join("\n")}`;
+  }
+
   validateSkills(names: string[]): void {
     const missingSkills = names.filter((name) => this.getSkillInfo(name) === null);
     if (missingSkills.length > 0) {
       throw new Error(`Required skill(s) not found: ${missingSkills.join(", ")}`);
     }
-  }
-
-  promptSummary(names: string[]): string {
-    const summaryLines = names
-      .map((name) => this.getSkillInfo(name))
-      .filter((info): info is SkillInfo => info !== null)
-      .map((info) => `- ${info.name}: ${info.description}`);
-
-    if (summaryLines.length === 0) return "";
-    return `Available skills (call mcp__circe-skills__use_skill to load full methodology):\n${summaryLines.join("\n")}`;
   }
 
   private collectSkillsFromDir(dir: string, visitedNames: Set<string>, skills: SkillInfo[]): void {
@@ -86,12 +86,12 @@ export class SkillRegistry {
     if (!existsSync(skillFilePath)) return null;
 
     const content = readFileSync(skillFilePath, "utf-8");
-    const frontmatter = this.parseFrontmatter(content);
-    if (!frontmatter.name) return null;
+    const parsedFrontmatter = this.parseFrontmatter(content);
+    if (!parsedFrontmatter.name) return null;
 
     return {
-      name: frontmatter.name,
-      description: frontmatter.description ?? "",
+      name: parsedFrontmatter.name,
+      description: parsedFrontmatter.description ?? "",
       source: dir,
     };
   }

@@ -34,14 +34,12 @@ agentsCommand
 agentsCommand
   .command("list")
   .action(() => {
-    const dir = resolveAgentsDir();
-    const agentFiles = readdirSync(dir).filter((file) => file.endsWith(AGENT_FILE_EXTENSION));
-    if (agentFiles.length === 0) {
+    const agents = listAgentFiles();
+    if (agents.length === 0) {
       console.log("No agents found.");
       return;
     }
-    for (const file of agentFiles) {
-      const agent = readAgentFile(join(dir, file));
+    for (const agent of agents) {
       console.log(`  ${agent.name}`);
     }
   });
@@ -49,36 +47,42 @@ agentsCommand
 agentsCommand
   .command("info <name>")
   .action((name: string) => {
-    const filePath = resolveAgentFilePath(name);
-    if (!existsSync(filePath)) {
-      console.error(`Agent '${name}' not found.`);
-      process.exit(1);
-    }
-    const agent = readAgentFile(filePath);
+    const agent = requireAgent(name);
     console.log(JSON.stringify(agent, null, 2));
   });
 
 agentsCommand
   .command("delete <name>")
   .action((name: string) => {
-    const filePath = resolveAgentFilePath(name);
-    if (!existsSync(filePath)) {
-      console.error(`Agent '${name}' not found.`);
-      process.exit(1);
-    }
-    unlinkSync(filePath);
+    requireAgent(name);
+    unlinkSync(resolveAgentFilePath(name));
     console.log(`Agent '${name}' deleted.`);
   });
 
 function resolveAgentsDir(): string {
-  const home = circeHome();
-  const dir = join(home, "agents");
+  const dir = join(circeHome(), "agents");
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function resolveAgentFilePath(name: string): string {
   return join(resolveAgentsDir(), `${name}${AGENT_FILE_EXTENSION}`);
+}
+
+function requireAgent(name: string): AgentData {
+  const filePath = resolveAgentFilePath(name);
+  if (!existsSync(filePath)) {
+    console.error(`Agent '${name}' not found.`);
+    process.exit(1);
+  }
+  return readAgentFile(filePath);
+}
+
+function listAgentFiles(): AgentData[] {
+  const dir = resolveAgentsDir();
+  return readdirSync(dir)
+    .filter((file) => file.endsWith(AGENT_FILE_EXTENSION))
+    .map((file) => readAgentFile(join(dir, file)));
 }
 
 function buildAgentData(name: string, opts: CreateAgentOptions): AgentData {

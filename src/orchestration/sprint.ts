@@ -24,35 +24,17 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
 
   get lastMetrics() { return this._lastMetrics; }
 
-  async run(spec: TIn): Promise<{ sprintResults: TOut[] }> {
+  async run(input: TIn): Promise<{ sprintResults: TOut[] }> {
     this._lastMetrics = null;
 
     const accumulated = createMetrics();
-    const definitions = this.extractSprintDefinitions(spec);
+    const definitions = this.extractSprintDefinitions(input);
     const sprintResults: TOut[] = [];
 
     try {
       for (let index = 0; index < definitions.length; index++) {
-        const sprintDef = definitions[index];
-        this.eventBus?.emit({ type: "sprint:start", index, definition: sprintDef, timestamp: Date.now() });
-
-        try {
-          const result = await runWithOptionalRetry(this.runner, sprintDef, this.retryPolicy, this.eventBus);
-          sprintResults.push(result);
-
-          const m = this.runner.lastMetrics;
-          accumulateMetrics(accumulated, m);
-
-          this.eventBus?.emit({ type: "sprint:done", index, result, cost: m?.cost, timestamp: Date.now() });
-        } catch (error) {
-          this.eventBus?.emit({
-            type: "sprint:error",
-            index,
-            error: errorMessage(error),
-            timestamp: Date.now(),
-          });
-          throw new Error(`[Sprint:item-${index}] ${errorMessage(error)}`);
-        }
+        const result = await this.runSprintItem(index, definitions[index], accumulated);
+        sprintResults.push(result);
       }
 
       this._lastMetrics = { ...accumulated };
@@ -64,8 +46,29 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
     }
   }
 
-  private extractSprintDefinitions(spec: unknown): unknown[] {
-    if (spec == null || typeof spec !== "object") return [];
-    return (spec as Record<string, unknown>).sprints as unknown[] ?? [];
+  private async runSprintItem(
+    index: number,
+    definition: unknown,
+    accumulated: MetricsAccumulator,
+  ): Promise<TOut> {
+    this.eventBus?.emit({ type: "sprint:start", index, definition, timestamp: Date.now() });
+
+    try {
+      const result = await runWithOptionalRetry(this.runner, definition, this.retryPolicy, this.eventBus);
+
+      const metrics = this.runner.lastMetrics;
+      accumulateMetrics(accumulated, metrics);
+
+      this.eventBus?.emit({ type: "sprint:done", index, result, cost: metrics?.cost, timestamp: Date.now() });
+      return result;
+    } catch (error) {
+      this.eventBus?.emit({ type: "sprint:error", index, error: errorMessage(error), timestamp: Date.now() });
+      throw new Error(`[Sprint:item-${index}] ${errorMessage(error)}`);
+    }
+  }
+
+  private extractSprintDefinitions(input: unknown): unknown[] {
+    if (input == null || typeof input !== "object") return [];
+    return (input as Record<string, unknown>).sprints as unknown[] ?? [];
   }
 }
