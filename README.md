@@ -1,8 +1,14 @@
 # Circe
 
-GAN-style multi-agent framework that turns prompts into full-stack applications.
+[![npm version](https://img.shields.io/npm/v/@hham21/circe)](https://www.npmjs.com/package/@hham21/circe)
+[![npm downloads](https://img.shields.io/npm/dw/@hham21/circe)](https://www.npmjs.com/package/@hham21/circe)
+[![license](https://img.shields.io/npm/l/@hham21/circe)](https://github.com/hham21/circe/blob/main/LICENSE)
 
-Inspired by Anthropic's [Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps) — a Planner, Generator, and Evaluator work together in an adversarial loop to build, test, and refine applications autonomously.
+Composable multi-agent orchestration framework built on the [Claude Agent SDK](https://github.com/anthropic/claude-agent-sdk). ~2K lines of source, 5 dependencies.
+
+Five building blocks — Pipeline, Loop, Parallel, Contract, Sprint — snap together like LEGO to create complex agent workflows. Runs in the Claude Code ecosystem with OAuth (free) or API key.
+
+Originally inspired by Anthropic's [harness design for long-running apps](https://www.anthropic.com/engineering/harness-design-long-running-apps). Works for any agent composition pattern — not just adversarial loops.
 
 ## Install
 
@@ -10,10 +16,14 @@ Inspired by Anthropic's [Harness Design for Long-Running Application Development
 npm install @hham21/circe
 ```
 
-Requires Node.js 22+ and a Claude API key:
+Requires Node.js 22+ and Claude authentication (API key or OAuth):
 
 ```bash
+# API key
 export ANTHROPIC_API_KEY=sk-ant-...
+
+# Or OAuth (Claude App, Claude Code, etc.)
+# The Agent SDK detects OAuth tokens automatically
 ```
 
 ## Quick Start
@@ -61,12 +71,55 @@ const evaluator = new Agent({
   prompt: "Strict QA engineer.",
   model: "claude-opus-4-6",
   tools: ["Read", "Bash"],
+  disallowedTools: ["Write"],
   skills: ["qa"],
   contextStrategy: "reset",
 });
 ```
 
-All Claude Agent SDK built-in tools (Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Agent) are available by default. Restrict with `tools`. Set `model` per agent to control cost/capability.
+All Claude Agent SDK built-in tools (Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Agent) are available by default. Restrict with `tools` (allowlist) or `disallowedTools` (blocklist). Set `model` per agent to control cost/capability.
+
+#### Structured Output
+
+Use Zod schemas to validate agent input and output:
+
+```typescript
+import { Agent } from "@hham21/circe";
+import { z } from "zod";
+
+const planner = new Agent({
+  name: "planner",
+  prompt: "Break the spec into features.",
+  outputSchema: z.object({
+    features: z.array(z.object({
+      name: z.string(),
+      description: z.string(),
+    })),
+  }),
+});
+
+const result = await planner.run("Build a todo app");
+// result is typed and validated against the schema
+```
+
+#### Full Agent Options
+
+| Option | Type | Description |
+|---|---|---|
+| `name` | `string` | Agent name (required) |
+| `prompt` | `string` | System prompt (required) |
+| `model` | `string` | Claude model ID |
+| `tools` | `string[]` | Allowed tools (allowlist) |
+| `disallowedTools` | `string[]` | Blocked tools (blocklist) |
+| `skills` | `string[]` | On-demand prompt templates |
+| `mcpServers` | `Record<string, unknown>` | MCP server config |
+| `contextStrategy` | `"compaction" \| "reset"` | Context management |
+| `inputSchema` | `ZodSchema` | Validate input |
+| `outputSchema` | `ZodSchema` | Validate & type output |
+| `permissionMode` | `string` | Tool permission mode |
+| `continueSession` | `boolean` | Resume previous session |
+| `costPerMTokens` | `{ input, output }` | Custom cost rates |
+| `timeout` | `number` | Max execution time (ms) |
 
 ### Orchestrators
 
@@ -77,10 +130,12 @@ Five composable building blocks, all generic: `Runnable<TIn, TOut>`.
 | `Pipeline` | Sequential execution | `new Pipeline(planner, builder)` or `pipe(a, b, c)` |
 | `Loop` | Repeat until condition | `new Loop(gen, eval, { maxRounds: 3, stopWhen: ... })` |
 | `Parallel` | Concurrent execution | `new Parallel(frontend, backend)` |
-| `Contract` | Pre-build negotiation | `new Contract(proposer, reviewer)` |
+| `Contract` | Pre-build negotiation | `new Contract(proposer, reviewer, { isAccepted: ... })` |
 | `Sprint` | Feature decomposition | `new Sprint(runner)` |
 
 Loop and Contract return **producer output on success** (the content, not the evaluation). Access evaluation via `.lastEvaluatorResult`. All orchestrators expose `.lastMetrics` for cost tracking.
+
+`Parallel` returns a `Record<string, { status: "fulfilled", value } | { status: "rejected", error }>`. `Sprint` returns `{ sprintResults: TOut[] }`.
 
 Compose freely:
 
@@ -93,6 +148,44 @@ pipe(planner, new Loop(generator, evaluator, { maxRounds: 3 }));
 // With negotiation
 pipe(planner, new Contract(proposer, reviewer), new Loop(generator, evaluator));
 ```
+
+### Events & Observability
+
+`EventBus` tracks cost, emits lifecycle events, and enforces budget limits across all orchestrators:
+
+```typescript
+import { EventBus } from "@hham21/circe";
+
+const bus = new EventBus({ maxCost: 5.0 }); // throws if exceeded
+
+bus.on("agent:done", (e) => console.log(`${e.agent}: $${e.cost.toFixed(4)}`));
+bus.on("round:done", (e) => console.log(`Round ${e.round} complete`));
+bus.on("retry", (e) => console.log(`Retrying ${e.agent} (${e.attempt}/${e.maxAttempts})`));
+
+const loop = new Loop(generator, evaluator, {
+  maxRounds: 3,
+  eventBus: bus,
+});
+
+await loop.run(input);
+console.log(bus.getCostSummary()); // { total: 1.23, perAgent: { generator: 0.8, evaluator: 0.43 } }
+```
+
+Event types: `agent:start/done/error`, `step:start/done/error` (Pipeline), `round:start/done/error` (Loop/Contract), `branch:start/done/error` (Parallel), `sprint:start/done/error` (Sprint), `retry`, `pipeline:done`.
+
+### Retry
+
+All orchestrators accept a `retryPolicy` for automatic retries with exponential backoff:
+
+```typescript
+const loop = new Loop(generator, evaluator, {
+  maxRounds: 3,
+  retryPolicy: { maxRetries: 2 },
+  eventBus: bus,
+});
+```
+
+Defaults: exponential backoff (1s-60s), skips non-retryable errors (400, 401, 403). Customize with `backoff` and `shouldRetry` functions.
 
 ### Session
 
@@ -111,16 +204,17 @@ Without Session, you can still use the global setters (`setFormatter`, `setWorkD
 
 ### Tools
 
-```typescript
-import { tool } from "@hham21/circe";
+MCP servers are supported via the `mcpServers` parameter on agents:
 
-const searchNpm = tool(function searchNpm(query: string): string {
-  // Search npm packages
-  return `results for ${query}`;
+```typescript
+const agent = new Agent({
+  name: "researcher",
+  prompt: "Research the topic.",
+  mcpServers: {
+    "web-search": { command: "npx", args: ["-y", "@anthropic-ai/mcp-web-search"] },
+  },
 });
 ```
-
-MCP servers are supported via the `mcpServers` parameter on agents.
 
 ### Skills
 
@@ -161,6 +255,7 @@ circe run workflow.js -i "prompt or spec file" -v
 circe skills list
 circe skills create my-skill
 circe skills info my-skill
+circe skills delete my-skill
 ```
 
 ## Architecture
@@ -170,7 +265,7 @@ Session Layer      Session (AsyncLocalStorage context propagation)
 CLI Layer          circe run, skills
 Orchestration      Pipeline, Loop, Parallel, Sprint, Contract
 Agent Layer        Agent, agent(), Handoff, Context Strategy
-Tool Layer         SDK built-ins, tool(), MCP servers, Skills
+Tool Layer         SDK built-ins, MCP servers, Skills
 ```
 
 ## Development
