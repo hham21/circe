@@ -344,3 +344,161 @@ describe("loadAgent", () => {
     await expect(loadAgent("bad-schema")).rejects.toThrow("Invalid agent config");
   });
 });
+
+describe("Agent enhanced logging", () => {
+  it("handleAssistantMessage calls logToolCall for tool_use blocks", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = {
+      logToolCall: vi.fn(),
+      logThinking: vi.fn(),
+    };
+
+    (a as any).handleAssistantMessage(
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "tu1", name: "Bash", input: { command: "npm test" } },
+          ],
+        },
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolCall).toHaveBeenCalledWith("test", "Bash", { command: "npm test" });
+  });
+
+  it("handleAssistantMessage extracts thinking blocks", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = {
+      logToolCall: vi.fn(),
+      logThinking: vi.fn(),
+    };
+
+    (a as any).handleAssistantMessage(
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "thinking", thinking: "Analyzing the code structure..." },
+          ],
+        },
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logThinking).toHaveBeenCalledWith("test", "Analyzing the code structure...");
+  });
+
+  it("handleAssistantMessage handles mixed content blocks", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = {
+      logToolCall: vi.fn(),
+      logThinking: vi.fn(),
+    };
+
+    (a as any).handleAssistantMessage(
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "thinking", thinking: "Let me check..." },
+            { type: "tool_use", id: "tu1", name: "Read", input: { file_path: "/src/index.ts" } },
+            { type: "text", text: "Here is my analysis" },
+          ],
+        },
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logThinking).toHaveBeenCalledOnce();
+    expect(mockFormatter.logToolCall).toHaveBeenCalledOnce();
+  });
+
+  it("handleAssistantMessage skips when no formatter methods", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    // Should not throw even with empty formatter
+    (a as any).handleAssistantMessage(
+      {
+        type: "assistant",
+        message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: {} }] },
+      },
+      {},
+    );
+  });
+
+  it("handleToolResult logs tool result for user messages", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    (a as any).pendingToolCalls.set("tu1", "Bash");
+
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        parent_tool_use_id: "tu1",
+        tool_use_result: "All 42 tests passed",
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "Bash", "All 42 tests passed");
+  });
+
+  it("handleToolResult stringifies non-string results", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    (a as any).pendingToolCalls.set("tu1", "Read");
+
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        parent_tool_use_id: "tu1",
+        tool_use_result: { content: "file contents" },
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).toHaveBeenCalledWith(
+      "test", "Read", '{"content":"file contents"}',
+    );
+  });
+
+  it("handleToolResult skips non-user messages", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult({ type: "assistant" }, mockFormatter);
+
+    expect(mockFormatter.logToolResult).not.toHaveBeenCalled();
+  });
+
+  it("handleToolResult skips messages without tool_use_result", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      { type: "user", parent_tool_use_id: "tu1" },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).not.toHaveBeenCalled();
+  });
+
+  it("handleToolResult uses 'unknown' for untracked tool_use_id", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        parent_tool_use_id: "untracked-id",
+        tool_use_result: "some result",
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "unknown", "some result");
+  });
+});
