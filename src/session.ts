@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sessionStore } from "./store.js";
-import { OutputFormatter } from "./cli/output.js";
+import { OutputFormatter, type LogLevel } from "./cli/output.js";
 import { SkillRegistry } from "./tools/skills.js";
 import { circeHome } from "./utils.js";
 
@@ -23,6 +23,7 @@ const DEFAULT_COST_POLICY: Required<CostPolicy> = {
 export interface SessionOptions {
   outputDir?: string;
   verbose?: boolean;
+  logLevel?: LogLevel;
   skills?: string[];
   maxCost?: number;
   costPolicy?: CostPolicy;
@@ -42,7 +43,8 @@ export class Session {
 
   constructor(options: SessionOptions = {}) {
     this.workDir = this.initWorkDir(options.outputDir);
-    this.formatter = this.initFormatter(options.verbose);
+    const resolvedLogLevel = options.logLevel ?? (options.verbose ? "debug" : undefined);
+    this.formatter = this.initFormatter(resolvedLogLevel);
     this.skillRegistry = this.initSkillRegistry(options.skills);
     this.maxCost = options.maxCost ?? null;
     this.costPolicy = { ...DEFAULT_COST_POLICY, ...options.costPolicy };
@@ -75,8 +77,8 @@ export class Session {
     return workDir;
   }
 
-  private initFormatter(verbose?: boolean): OutputFormatter {
-    const formatter = new OutputFormatter(verbose);
+  private initFormatter(logLevel?: LogLevel): OutputFormatter {
+    const formatter = new OutputFormatter(logLevel);
     formatter.setLogFile(join(this.workDir, "circe.log"));
     return formatter;
   }

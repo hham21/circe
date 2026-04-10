@@ -44,7 +44,7 @@ export {
   type ContractOptions,
   type SprintOptions,
 } from "./orchestration/index.js";
-export { OutputFormatter } from "./cli/output.js";
+export { OutputFormatter, type LogLevel } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
 export { Session, type SessionOptions, type CostPolicy } from "./session.js";
 export { setFormatter, setWorkDir, setSkillRegistry, getSkillRegistry } from "./context.js";

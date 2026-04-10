@@ -55,6 +55,7 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   private sessionId: string | null = null;
   private _lastMetrics: ResultMetrics | null = null;
   private outputJsonSchema: Record<string, unknown> | null = null;
+  private pendingToolCalls: Map<string, string> = new Map();
 
   get lastMetrics(): ResultMetrics | null {
     return this._lastMetrics;
@@ -114,6 +115,7 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
     const formatter = getFormatter() as any;
     const workDir = getWorkDir();
     formatter?.agentStart?.(this.name, this.prompt.slice(0, 60));
+    this.pendingToolCalls.clear();
 
     const userPrompt = this.buildUserPrompt(input);
     const options = this.buildSdkOptions(workDir, abortController);
@@ -124,6 +126,7 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
       for await (const message of query({ prompt: userPrompt, options })) {
         this.handleSessionInit(message);
         this.handleAssistantMessage(message, formatter);
+        this.handleToolResult(message, formatter);
         if (message.type === "result") {
           metrics = this.extractResultMetrics(message);
           structuredOutput = (message as any).structured_output;
@@ -214,12 +217,35 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
 
   private handleAssistantMessage(message: any, formatter: any): void {
     if (message.type !== "assistant") return;
-    if (!formatter?.logActivity || !message.message?.content) return;
+    if (!message.message?.content) return;
 
     for (const block of message.message.content) {
       if (block.type === "tool_use") {
-        formatter.logActivity(this.name, this.summarizeToolCall(block));
+        this.pendingToolCalls.set(block.id, block.name ?? "unknown");
+        formatter?.logToolCall?.(this.name, block.name ?? "unknown", block.input ?? {});
       }
+      if (block.type === "thinking" && block.thinking) {
+        formatter?.logThinking?.(this.name, block.thinking);
+      }
+    }
+  }
+
+  private handleToolResult(message: any, formatter: any): void {
+    if (message.type !== "user") return;
+    if (!formatter?.logToolResult || message.tool_use_result == null) return;
+
+    const toolName = message.parent_tool_use_id
+      ? (this.pendingToolCalls.get(message.parent_tool_use_id) ?? "unknown")
+      : "unknown";
+
+    const result = typeof message.tool_use_result === "string"
+      ? message.tool_use_result
+      : JSON.stringify(message.tool_use_result);
+
+    formatter.logToolResult(this.name, toolName, result);
+
+    if (message.parent_tool_use_id) {
+      this.pendingToolCalls.delete(message.parent_tool_use_id);
     }
   }
 
@@ -363,16 +389,6 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   private stripCodeBlock(text: string): string {
     const match = text.match(/```(?:\w*)\s*\n([\s\S]*?)\n```/);
     return match ? match[1].trim() : text;
-  }
-
-  private summarizeToolCall(block: any): string {
-    const name = block.name ?? "unknown";
-    const input = block.input ?? {};
-    if (name === "Bash" && input.command) return `$ ${input.command}`;
-    if (name === "Read" && input.file_path) return `Read ${input.file_path}`;
-    if (name === "Write" && input.file_path) return `Write ${input.file_path}`;
-    if (name === "Edit" && input.file_path) return `Edit ${input.file_path}`;
-    return name;
   }
 }
 
