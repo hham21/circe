@@ -14,7 +14,7 @@ import { Agent, Pipeline, EventBus, OutputFormatter, setFormatter } from "../src
 import { writeFileSync, readFileSync } from "node:fs";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 const HISTORY_FILE = "/tmp/circe-retry-resume-history.json";
 

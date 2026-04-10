@@ -9,7 +9,7 @@
 import { Agent, Pipeline, Loop, Contract, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 const TASK = "Write a product description for a smart water bottle that tracks hydration";
 

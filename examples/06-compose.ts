@@ -10,7 +10,7 @@
 import { Agent, Pipeline, Contract, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 // Phase 1: Contract — negotiate what to build
 const specWriter = new Agent({

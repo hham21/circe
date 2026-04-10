@@ -10,7 +10,7 @@
 import { Agent, Contract, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 const proposer = new Agent({
   name: "proposer",
