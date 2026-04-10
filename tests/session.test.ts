@@ -203,6 +203,37 @@ describe("AsyncLocalStorage propagation", () => {
   });
 });
 
+describe("Session cost policy", () => {
+  it("stores maxCost option", () => {
+    const session = new Session({ maxCost: 10.0 });
+    expect(session.maxCost).toBe(10.0);
+  });
+
+  it("stores custom costPolicy thresholds", () => {
+    const session = new Session({
+      maxCost: 10.0,
+      costPolicy: { warn: 0.5, softStop: 0.8, hardStop: 0.95 },
+    });
+    expect(session.costPolicy).toEqual({ warn: 0.5, softStop: 0.8, hardStop: 0.95 });
+  });
+
+  it("applies default costPolicy thresholds", () => {
+    const session = new Session({ maxCost: 10.0 });
+    expect(session.costPolicy).toEqual({ warn: 0.7, softStop: 0.9, hardStop: 1.0 });
+  });
+
+  it("shouldStop is initially false", () => {
+    const session = new Session({ maxCost: 10.0 });
+    expect(session.shouldStop).toBe(false);
+  });
+
+  it("shouldStop can be set to true", () => {
+    const session = new Session({ maxCost: 10.0 });
+    session.shouldStop = true;
+    expect(session.shouldStop).toBe(true);
+  });
+});
+
 describe("context.ts fallback", () => {
   it("getWorkDir falls back to global when no session", () => {
     setWorkDir("/global/path");
