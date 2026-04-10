@@ -52,7 +52,10 @@ export class OutputFormatter {
   }
 
   agentStart(name: string, _description: string): void {
-    this.writeLog(`[${name}] start`);
+    const ts = timestamp();
+    const label = this.agentLabel(name);
+    console.log(`${chalk.dim(ts)} ${label}  ${chalk.dim("start")}`);
+    this.writeLog(`[${name}] start`, ts);
   }
 
   agentDone(
@@ -74,14 +77,6 @@ export class OutputFormatter {
     const ts = timestamp();
     console.log(chalk.gray(`\n${ts} ── ${message} ──`));
     this.writeLog(`[info] ${message}`, ts);
-  }
-
-  logActivity(agentName: string, message: string): void {
-    if (!this.isEnabled("info")) return;
-    const ts = timestamp();
-    const label = this.agentLabel(agentName);
-    console.log(chalk.dim(`${ts} ${label}  ${message}`));
-    this.writeLog(`[${agentName}] ${message}`, ts);
   }
 
   logToolCall(agentName: string, toolName: string, input: Record<string, unknown>): void {
