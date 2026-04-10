@@ -22,9 +22,9 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
   private isAcceptedFn: ((review: TReview) => boolean) | null = null;
-  private lastMetricsValue: MetricsAccumulator | null = null;
-  private lastProposal: TProposal | null = null;
-  private lastReviewerResult: TReview | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
+  private _lastProposal: TProposal | null = null;
+  private _lastReviewerResult: TReview | null = null;
 
   constructor(proposer: Runnable<TIn | TReview, TProposal>, reviewer: Runnable<TProposal, TReview>, options?: ContractOptions<TReview>) {
     this.proposer = proposer;
@@ -35,8 +35,8 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
     this.eventBus = options?.eventBus ?? null;
   }
 
-  get lastMetrics() { return this.lastMetricsValue; }
-  get lastEvaluatorResult(): TReview | null { return this.lastReviewerResult; }
+  get lastMetrics() { return this._lastMetrics; }
+  get lastEvaluatorResult(): TReview | null { return this._lastReviewerResult; }
 
   async run(input: TIn): Promise<TProposal> {
     this.resetState();
@@ -52,26 +52,26 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
         const review = await this.executeRound(round, proposalInput, accumulated);
 
         if (this.isAccepted(review)) {
-          this.lastMetricsValue = { ...accumulated };
-          return this.lastProposal as TProposal;
+          this._lastMetrics = { ...accumulated };
+          return this._lastProposal as TProposal;
         }
 
         proposalInput = review;
       }
 
-      this.lastMetricsValue = { ...accumulated };
-      return this.lastProposal as TProposal;
+      this._lastMetrics = { ...accumulated };
+      return this._lastProposal as TProposal;
     } finally {
-      if (!this.lastMetricsValue) {
-        this.lastMetricsValue = { ...accumulated };
+      if (!this._lastMetrics) {
+        this._lastMetrics = { ...accumulated };
       }
     }
   }
 
   private resetState(): void {
-    this.lastMetricsValue = null;
-    this.lastProposal = null;
-    this.lastReviewerResult = null;
+    this._lastMetrics = null;
+    this._lastProposal = null;
+    this._lastReviewerResult = null;
   }
 
   private async executeRound(
@@ -81,14 +81,14 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
   ): Promise<TReview> {
     try {
       const proposal = await runWithOptionalRetry(this.proposer, proposalInput, this.retryPolicy, this.eventBus);
-      this.lastProposal = proposal;
+      this._lastProposal = proposal;
 
       const proposerMetrics = this.proposer.lastMetrics;
       accumulateMetrics(accumulated, proposerMetrics);
 
       const rawReview = await runWithOptionalRetry(this.reviewer, proposal, this.retryPolicy, this.eventBus);
       const review = this.parseReview(rawReview);
-      this.lastReviewerResult = review;
+      this._lastReviewerResult = review;
 
       const reviewerMetrics = this.reviewer.lastMetrics;
       accumulateMetrics(accumulated, reviewerMetrics);

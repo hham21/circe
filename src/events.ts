@@ -1,5 +1,5 @@
 import { sessionStore } from "./store.js";
-import type { CostPolicy } from "./session.js";
+import type { CostPolicy, Session } from "./session.js";
 
 export type OrchestratorEvent =
   | { type: "agent:start"; agent: string; timestamp: number }
@@ -120,22 +120,22 @@ export class EventBus {
     return sessionStore.getStore()?.maxCost ?? this.maxCost;
   }
 
-  private resolveCostPolicy(): CostPolicy | null {
-    return sessionStore.getStore()?.costPolicy ?? null;
-  }
-
   private trackCost(event: OrchestratorEvent): void {
     const costEntry = extractCostEntry(event);
     if (!costEntry) return;
 
     this.accumulateCost(costEntry);
 
-    const maxCost = this.resolveMaxCost();
-    const policy = this.resolveCostPolicy();
+    const session = sessionStore.getStore();
+    const maxCost = session?.maxCost ?? this.maxCost;
 
-    if (policy && maxCost != null) {
-      this.applyGraduatedPolicy(costEntry, policy, maxCost);
-    } else if (maxCost != null && this.runningCost > maxCost) {
+    if (maxCost == null) return;
+
+    const policy = session?.costPolicy;
+
+    if (policy) {
+      this.applyGraduatedPolicy(session, costEntry, policy, maxCost);
+    } else if (this.runningCost > maxCost) {
       // Fallback: no Session, use EventBusOptions.maxCost hard-stop (backward compat)
       throw new Error(buildCostLimitMessage(this.runningCost, maxCost));
     }
@@ -146,13 +146,13 @@ export class EventBus {
     this.costByAgent[entry.agent] = (this.costByAgent[entry.agent] ?? 0) + entry.cost;
   }
 
-  private applyGraduatedPolicy(entry: CostEntry, policy: CostPolicy, maxCost: number): void {
+  private applyGraduatedPolicy(session: Session, entry: CostEntry, policy: CostPolicy, maxCost: number): void {
     const costPressure = this.runningCost / maxCost;
 
     this.emitCostPressure(costPressure);
-    this.checkAgentLimit(entry);
+    this.checkAgentLimit(session, entry);
     this.checkWarnThreshold(policy, costPressure, maxCost);
-    this.checkSoftStopThreshold(policy, costPressure);
+    this.checkSoftStopThreshold(session, policy, costPressure);
     this.checkHardStopThreshold(policy, costPressure, maxCost);
   }
 
@@ -178,14 +178,11 @@ export class EventBus {
     });
   }
 
-  private checkSoftStopThreshold(policy: CostPolicy, costPressure: number): void {
+  private checkSoftStopThreshold(session: Session, policy: CostPolicy, costPressure: number): void {
     if (policy.softStop == null || costPressure < policy.softStop || this.hasSoftStopped) return;
 
     this.hasSoftStopped = true;
-    const session = sessionStore.getStore();
-    if (session) {
-      session.shouldStop = true;
-    }
+    session.shouldStop = true;
   }
 
   private checkHardStopThreshold(policy: CostPolicy, costPressure: number, maxCost: number): void {
@@ -194,10 +191,7 @@ export class EventBus {
     }
   }
 
-  private checkAgentLimit(entry: CostEntry): void {
-    const session = sessionStore.getStore();
-    if (!session) return;
-
+  private checkAgentLimit(session: Session, entry: CostEntry): void {
     const limit = session.agentCostLimits[entry.agent];
     if (limit == null) return;
 
