@@ -427,7 +427,7 @@ describe("Agent enhanced logging", () => {
     );
   });
 
-  it("handleToolResult logs tool result for user messages", () => {
+  it("handleToolResult logs tool result from content block", () => {
     const a = new Agent({ name: "test", prompt: "" });
     (a as any).pendingToolCalls.set("tu1", "Bash");
 
@@ -436,8 +436,11 @@ describe("Agent enhanced logging", () => {
     (a as any).handleToolResult(
       {
         type: "user",
-        parent_tool_use_id: "tu1",
-        tool_use_result: "All 42 tests passed",
+        message: {
+          content: [
+            { type: "tool_result", tool_use_id: "tu1", content: "All 42 tests passed" },
+          ],
+        },
       },
       mockFormatter,
     );
@@ -445,7 +448,7 @@ describe("Agent enhanced logging", () => {
     expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "Bash", "All 42 tests passed");
   });
 
-  it("handleToolResult stringifies non-string results", () => {
+  it("handleToolResult extracts text from array content blocks", () => {
     const a = new Agent({ name: "test", prompt: "" });
     (a as any).pendingToolCalls.set("tu1", "Read");
 
@@ -454,14 +457,45 @@ describe("Agent enhanced logging", () => {
     (a as any).handleToolResult(
       {
         type: "user",
-        parent_tool_use_id: "tu1",
-        tool_use_result: { content: "file contents" },
+        message: {
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tu1",
+              content: [
+                { type: "text", text: "line 1" },
+                { type: "text", text: "line 2" },
+              ],
+            },
+          ],
+        },
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "Read", "line 1\nline 2");
+  });
+
+  it("handleToolResult stringifies non-string/non-array content", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    (a as any).pendingToolCalls.set("tu1", "Glob");
+
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        message: {
+          content: [
+            { type: "tool_result", tool_use_id: "tu1", content: { filenames: ["a.ts"] } },
+          ],
+        },
       },
       mockFormatter,
     );
 
     expect(mockFormatter.logToolResult).toHaveBeenCalledWith(
-      "test", "Read", '{"content":"file contents"}',
+      "test", "Glob", '{"filenames":["a.ts"]}',
     );
   });
 
@@ -474,14 +508,27 @@ describe("Agent enhanced logging", () => {
     expect(mockFormatter.logToolResult).not.toHaveBeenCalled();
   });
 
-  it("handleToolResult skips messages without tool_use_result", () => {
+  it("handleToolResult skips user messages without tool_result content blocks", () => {
     const a = new Agent({ name: "test", prompt: "" });
     const mockFormatter = { logToolResult: vi.fn() };
 
     (a as any).handleToolResult(
-      { type: "user", parent_tool_use_id: "tu1" },
+      {
+        type: "user",
+        message: { content: [{ type: "text", text: "plain user text" }] },
+      },
       mockFormatter,
     );
+
+    expect(mockFormatter.logToolResult).not.toHaveBeenCalled();
+  });
+
+  it("handleToolResult skips messages without content array", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult({ type: "user" }, mockFormatter);
+    (a as any).handleToolResult({ type: "user", message: {} }, mockFormatter);
 
     expect(mockFormatter.logToolResult).not.toHaveBeenCalled();
   });
@@ -493,8 +540,11 @@ describe("Agent enhanced logging", () => {
     (a as any).handleToolResult(
       {
         type: "user",
-        parent_tool_use_id: "untracked-id",
-        tool_use_result: "some result",
+        message: {
+          content: [
+            { type: "tool_result", tool_use_id: "untracked-id", content: "some result" },
+          ],
+        },
       },
       mockFormatter,
     );
@@ -502,14 +552,16 @@ describe("Agent enhanced logging", () => {
     expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "unknown", "some result");
   });
 
-  it("handleToolResult uses 'unknown' when parent_tool_use_id is absent", () => {
+  it("handleToolResult uses 'unknown' when tool_use_id is absent", () => {
     const a = new Agent({ name: "test", prompt: "" });
     const mockFormatter = { logToolResult: vi.fn() };
 
     (a as any).handleToolResult(
       {
         type: "user",
-        tool_use_result: "some result",
+        message: {
+          content: [{ type: "tool_result", content: "some result" }],
+        },
       },
       mockFormatter,
     );
@@ -526,12 +578,55 @@ describe("Agent enhanced logging", () => {
     (a as any).handleToolResult(
       {
         type: "user",
-        parent_tool_use_id: "tu1",
-        tool_use_result: "done",
+        message: {
+          content: [{ type: "tool_result", tool_use_id: "tu1", content: "done" }],
+        },
       },
       mockFormatter,
     );
 
     expect((a as any).pendingToolCalls.has("tu1")).toBe(false);
+  });
+
+  it("handleToolResult deletes pendingToolCalls entry even when formatter is absent", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    (a as any).pendingToolCalls.set("tu1", "Bash");
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        message: {
+          content: [{ type: "tool_result", tool_use_id: "tu1", content: "done" }],
+        },
+      },
+      {},
+    );
+
+    expect((a as any).pendingToolCalls.has("tu1")).toBe(false);
+  });
+
+  it("handleToolResult handles multiple tool_result blocks in one message", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    (a as any).pendingToolCalls.set("tu1", "Bash");
+    (a as any).pendingToolCalls.set("tu2", "Read");
+
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        message: {
+          content: [
+            { type: "tool_result", tool_use_id: "tu1", content: "bash result" },
+            { type: "tool_result", tool_use_id: "tu2", content: "read result" },
+          ],
+        },
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).toHaveBeenCalledTimes(2);
+    expect(mockFormatter.logToolResult).toHaveBeenNthCalledWith(1, "test", "Bash", "bash result");
+    expect(mockFormatter.logToolResult).toHaveBeenNthCalledWith(2, "test", "Read", "read result");
   });
 });
