@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 export interface ParallelOptions {
   throwOnError?: boolean;
@@ -41,6 +42,11 @@ export class Parallel<TIn = unknown, TOut = unknown> implements Runnable<TIn, Pa
 
   async run(input: TIn): Promise<ParallelResult<TOut>> {
     this._lastMetrics = null;
+
+    if (isStopped()) {
+      this._lastMetrics = createMetrics();
+      return {} as ParallelResult<TOut>;
+    }
 
     const settledResults = await Promise.allSettled(
       this.agents.map((agent, index) => this.runAgent(agent, input, index)),

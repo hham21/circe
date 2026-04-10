@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 const DEFAULT_MAX_ROUNDS = 3;
 
@@ -51,6 +52,7 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
 
     try {
       for (let round = 0; round < this.maxRounds; round++) {
+        if (isStopped()) break;
         this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
         result = await this.executeRound(round, result, accumulated);

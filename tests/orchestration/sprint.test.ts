@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Sprint } from "../../src/orchestration/sprint.js";
+import { sessionStore } from "../../src/store.js";
+import type { Runnable } from "../../src/types.js";
 
 describe("Sprint", () => {
   it("decomposes spec into sprints and runs each", async () => {
@@ -64,5 +66,40 @@ describe("Sprint", () => {
       inputTokens: 100,
       outputTokens: 50,
     });
+  });
+});
+
+describe("Sprint shouldStop", () => {
+  it("stops early when shouldStop is true", async () => {
+    let itemsRan = 0;
+    const runner: Runnable<any, string> = {
+      name: "runner", lastMetrics: null,
+      async run() {
+        itemsRan++;
+        const session = sessionStore.getStore();
+        if (session && itemsRan >= 2) session.shouldStop = true;
+        return "done";
+      },
+    };
+
+    const session = { shouldStop: false } as any;
+    const sprint = new Sprint(runner);
+    const result = await sessionStore.run(session, () =>
+      sprint.run({ sprints: ["a", "b", "c", "d"] })
+    );
+    expect(itemsRan).toBe(2);
+    expect(result.sprintResults).toHaveLength(2);
+  });
+
+  it("runs all items when no Session", async () => {
+    let itemsRan = 0;
+    const runner: Runnable<any, string> = {
+      name: "runner", lastMetrics: null,
+      async run() { itemsRan++; return "done"; },
+    };
+
+    const sprint = new Sprint(runner);
+    await sprint.run({ sprints: ["a", "b", "c"] });
+    expect(itemsRan).toBe(3);
   });
 });

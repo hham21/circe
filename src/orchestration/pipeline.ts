@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy, OrchestratorEvent } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 export interface PipelineOptions {
   retryPolicy?: RetryPolicy;
@@ -36,6 +37,7 @@ export class Pipeline<TIn = unknown, TOut = unknown> implements Runnable<TIn, TO
 
     try {
       for (let i = 0; i < this.agents.length; i++) {
+        if (isStopped()) break;
         stepOutput = await this.runStep(this.agents[i], i, stepOutput);
         accumulateMetrics(accumulated, this.agents[i].lastMetrics);
       }

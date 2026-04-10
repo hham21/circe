@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 export interface SprintOptions {
   retryPolicy?: RetryPolicy;
@@ -33,6 +34,7 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
 
     try {
       for (let index = 0; index < definitions.length; index++) {
+        if (isStopped()) break;
         const result = await this.runSprintItem(index, definitions[index], accumulated);
         sprintResults.push(result);
       }

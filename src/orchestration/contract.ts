@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import type { MetricsAccumulator } from "../utils.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { findJsonString, createMetrics, accumulateMetrics } from "../utils.js";
+import { isStopped } from "../store.js";
 
 const DEFAULT_MAX_ROUNDS = 3;
 
@@ -45,6 +46,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
 
     try {
       for (let round = 0; round < this.maxRounds; round++) {
+        if (isStopped()) break;
         this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
         const review = await this.executeRound(round, proposalInput, accumulated);

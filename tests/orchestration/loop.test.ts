@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Loop } from "../../src/orchestration/loop.js";
+import { sessionStore } from "../../src/store.js";
+import type { Runnable } from "../../src/types.js";
 
 class FakeGenerator {
   name = "generator";
@@ -140,5 +142,45 @@ describe("Loop", () => {
     expect(result.code).toBe("v1");
     expect((loop.lastEvaluatorResult as any).passed).toBe(false);
     expect((loop.lastEvaluatorResult as any).feedback).toBe("needs work");
+  });
+});
+
+describe("Loop shouldStop", () => {
+  it("stops early when shouldStop is true", async () => {
+    let producerCalls = 0;
+    const producer: Runnable<string, string> = {
+      name: "producer", lastMetrics: null,
+      async run() {
+        producerCalls++;
+        const session = sessionStore.getStore();
+        if (session && producerCalls >= 2) session.shouldStop = true;
+        return "produced";
+      },
+    };
+    const evaluator: Runnable<string, string> = {
+      name: "evaluator", lastMetrics: null,
+      async run() { return "evaluated"; },
+    };
+
+    const session = { shouldStop: false } as any;
+    const loop = new Loop(producer, evaluator, { maxRounds: 10 });
+    await sessionStore.run(session, () => loop.run("input"));
+    expect(producerCalls).toBe(2);
+  });
+
+  it("runs all rounds when no Session", async () => {
+    let rounds = 0;
+    const producer: Runnable<string, string> = {
+      name: "producer", lastMetrics: null,
+      async run() { rounds++; return "p"; },
+    };
+    const evaluator: Runnable<string, string> = {
+      name: "evaluator", lastMetrics: null,
+      async run() { return "e"; },
+    };
+
+    const loop = new Loop(producer, evaluator, { maxRounds: 3 });
+    await loop.run("input");
+    expect(rounds).toBe(3);
   });
 });
