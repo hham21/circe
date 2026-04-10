@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 const DEFAULT_MAX_ROUNDS = 3;
 
@@ -20,9 +21,9 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
   private stopWhen: ((result: TEval) => boolean) | null;
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
-  private lastMetricsValue: MetricsAccumulator | null = null;
-  private lastProducerResult: TProducer | null = null;
-  private lastEvaluatorResultValue: TEval | null = null;
+  private _lastMetrics: MetricsAccumulator | null = null;
+  private _lastProducerResult: TProducer | null = null;
+  private _lastEvaluatorResult: TEval | null = null;
 
   constructor(...args: [...Runnable<any, any>[], LoopOptions<TEval>] | Runnable<any, any>[]) {
     const { agents, options } = parseTrailingOptions<LoopOptions<TEval>>(args);
@@ -38,34 +39,35 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
     this.eventBus = options.eventBus ?? null;
   }
 
-  get lastMetrics() { return this.lastMetricsValue; }
-  get lastEvaluatorResult(): TEval | null { return this.lastEvaluatorResultValue; }
+  get lastMetrics(): MetricsAccumulator | null { return this._lastMetrics; }
+  get lastEvaluatorResult(): TEval | null { return this._lastEvaluatorResult; }
 
   async run(input: TIn): Promise<TProducer> {
-    this.lastMetricsValue = null;
-    this.lastProducerResult = null;
-    this.lastEvaluatorResultValue = null;
+    this._lastMetrics = null;
+    this._lastProducerResult = null;
+    this._lastEvaluatorResult = null;
 
     const accumulated = createMetrics();
     let result: unknown = input;
 
     try {
       for (let round = 0; round < this.maxRounds; round++) {
+        if (isStopped()) break;
         this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
         result = await this.executeRound(round, result, accumulated);
 
         if (this.stopWhen?.(result as TEval)) {
-          this.lastMetricsValue = { ...accumulated };
-          return this.lastProducerResult as TProducer;
+          this._lastMetrics = { ...accumulated };
+          return this._lastProducerResult as TProducer;
         }
       }
 
-      this.lastMetricsValue = { ...accumulated };
-      return this.lastProducerResult as TProducer;
+      this._lastMetrics = { ...accumulated };
+      return this._lastProducerResult as TProducer;
     } finally {
-      if (!this.lastMetricsValue) {
-        this.lastMetricsValue = { ...accumulated };
+      if (!this._lastMetrics) {
+        this._lastMetrics = { ...accumulated };
       }
     }
   }
@@ -79,18 +81,25 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
       let result = input;
       let roundCost = 0;
 
-      for (let i = 0; i < this.agents.length; i++) {
-        const agent = this.agents[i];
+      for (let agentIndex = 0; agentIndex < this.agents.length; agentIndex++) {
+        const agent = this.agents[agentIndex];
         result = await this.runAgent(agent, result);
 
         const agentMetrics = agent.lastMetrics;
         accumulateMetrics(accumulated, agentMetrics);
         if (agentMetrics) roundCost += agentMetrics.cost;
 
-        this.captureRoundOutputs(i, result);
+        this.captureRoundOutputs(agentIndex, result);
       }
 
-      this.eventBus?.emit({ type: "round:done", round, result, cost: roundCost || undefined, timestamp: Date.now() });
+      this.eventBus?.emit({
+        type: "round:done",
+        round,
+        result,
+        cost: roundCost || undefined,
+        costByAgent: this.eventBus ? { ...this.eventBus.getCostSummary().perAgent } : undefined,
+        timestamp: Date.now(),
+      });
       return result;
     } catch (err) {
       this.eventBus?.emit({ type: "round:error", round, error: errorMessage(err), timestamp: Date.now() });
@@ -103,10 +112,10 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
     const isEvaluator = agentIndex === this.agents.length - 1;
 
     if (isProducer) {
-      this.lastProducerResult = result as TProducer;
+      this._lastProducerResult = result as TProducer;
     }
     if (isEvaluator) {
-      this.lastEvaluatorResultValue = result as TEval;
+      this._lastEvaluatorResult = result as TEval;
     }
   }
 

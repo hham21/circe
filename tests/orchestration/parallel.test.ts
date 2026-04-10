@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Parallel } from "../../src/orchestration/parallel.js";
+import { sessionStore } from "../../src/store.js";
+import type { Runnable } from "../../src/types.js";
 
 class FakeAgentWithMetrics {
   name: string;
@@ -53,5 +55,33 @@ describe("Parallel", () => {
       inputTokens: 300,
       outputTokens: 150,
     });
+  });
+});
+
+describe("Parallel shouldStop", () => {
+  it("short-circuits at run() entry when shouldStop is true", async () => {
+    let agentRan = false;
+    const agent: Runnable<string, string> = {
+      name: "agent", lastMetrics: null,
+      async run() { agentRan = true; return "done"; },
+    };
+
+    const session = { shouldStop: true } as any;
+    const parallel = new Parallel(agent);
+    const result = await sessionStore.run(session, () => parallel.run("input"));
+    expect(agentRan).toBe(false);
+    expect(result).toEqual({});
+  });
+
+  it("runs normally when no Session", async () => {
+    let agentRan = false;
+    const agent: Runnable<string, string> = {
+      name: "agent", lastMetrics: null,
+      async run() { agentRan = true; return "done"; },
+    };
+
+    const parallel = new Parallel(agent);
+    await parallel.run("input");
+    expect(agentRan).toBe(true);
   });
 });

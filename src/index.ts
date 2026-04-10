@@ -6,6 +6,7 @@ export {
   defaultBackoff,
   type OrchestratorEvent,
   type RetryPolicy,
+  type EventBusOptions,
 } from "./events.js";
 export {
   findJsonString,
@@ -35,6 +36,7 @@ export {
   Parallel,
   Contract,
   Sprint,
+  map,
   type PipelineOptions,
   type LoopOptions,
   type ParallelOptions,
@@ -44,6 +46,6 @@ export {
 } from "./orchestration/index.js";
 export { OutputFormatter } from "./cli/output.js";
 export { SkillRegistry, type SkillInfo } from "./tools/skills.js";
-export { Session, type SessionOptions } from "./session.js";
+export { Session, type SessionOptions, type CostPolicy } from "./session.js";
 export { setFormatter, setWorkDir, setSkillRegistry, getSkillRegistry } from "./context.js";
 export { RunContextSchema, type RunContext, type Runnable, type MetricsSnapshot } from "./types.js";

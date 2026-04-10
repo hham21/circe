@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventBus, defaultShouldRetry, defaultBackoff, executeWithRetry } from "../src/events.js";
+import { sessionStore } from "../src/store.js";
+import { Session } from "../src/session.js";
 
 describe("EventBus", () => {
   it("records events in history", () => {
@@ -61,24 +63,45 @@ describe("EventBus", () => {
     expect(bus.getCostSummary()).toEqual({ total: 0, perAgent: {} });
   });
 
-  it("getCostSummary aggregates step:done and branch:done costs", () => {
+  it("getCostSummary counts branch:done but not step:done costs", () => {
     const bus = new EventBus();
     bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
     bus.emit({ type: "step:done", step: 1, agent: "builder", output: "", cost: 1.0, tokens: [200, 100], timestamp: 2 });
     bus.emit({ type: "branch:done", branch: "frontend", result: "", cost: 0.8, timestamp: 3 });
 
     const summary = bus.getCostSummary();
-    expect(summary.total).toBe(2.3);
-    expect(summary.perAgent).toEqual({ planner: 0.5, builder: 1.0, frontend: 0.8 });
+    expect(summary.total).toBe(0.8);
+    expect(summary.perAgent).toEqual({ frontend: 0.8 });
   });
 
-  it("maxCost triggers from step:done costs", () => {
+  it("maxCost triggers from agent:done costs", () => {
     const bus = new EventBus({ maxCost: 1.0 });
-    bus.emit({ type: "step:done", step: 0, agent: "planner", output: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
+    bus.emit({ type: "agent:done", agent: "planner", result: "", cost: 0.5, tokens: [100, 50], timestamp: 1 });
 
     expect(() => {
-      bus.emit({ type: "step:done", step: 1, agent: "builder", output: "", cost: 0.8, tokens: [200, 100], timestamp: 2 });
+      bus.emit({ type: "agent:done", agent: "builder", result: "", cost: 0.8, tokens: [200, 100], timestamp: 2 });
     }).toThrow("Cost limit exceeded");
+  });
+
+  it("does not double-count costs from nested orchestrator events", () => {
+    const bus = new EventBus();
+    // Simulate Pipeline inside Loop:
+    bus.emit({ type: "agent:done", agent: "writer", result: "", cost: 1.0, tokens: [100, 50], timestamp: 1 });
+    bus.emit({ type: "step:done", step: 0, agent: "writer", output: "", cost: 1.0, tokens: [100, 50], timestamp: 2 });
+    bus.emit({ type: "round:done", round: 0, result: "", cost: 1.0, timestamp: 3 });
+
+    const summary = bus.getCostSummary();
+    expect(summary.total).toBe(1.0);
+  });
+
+  it("counts branch:done costs from Parallel", () => {
+    const bus = new EventBus();
+    bus.emit({ type: "branch:done", branch: "collector-1", result: "", cost: 0.5, timestamp: 1 });
+    bus.emit({ type: "branch:done", branch: "collector-2", result: "", cost: 0.8, timestamp: 2 });
+
+    const summary = bus.getCostSummary();
+    expect(summary.total).toBe(1.3);
+    expect(summary.perAgent).toEqual({ "collector-1": 0.5, "collector-2": 0.8 });
   });
 
   it("maxCost throws when total cost exceeds limit", () => {
@@ -194,5 +217,123 @@ describe("executeWithRetry", () => {
       ),
     ).rejects.toThrow("401");
     expect(calls).toBe(1);
+  });
+});
+
+describe("EventBus graduated cost policy", () => {
+  function emitCost(bus: EventBus, agent: string, cost: number) {
+    bus.emit({ type: "agent:done", agent, result: "", cost, tokens: [100, 50], timestamp: Date.now() });
+  }
+
+  it("emits cost:warning at warn threshold", () => {
+    const session = new Session({ maxCost: 10.0, costPolicy: { warn: 0.5 } });
+    const bus = new EventBus();
+    const warnings: any[] = [];
+    bus.on("cost:warning" as any, (e: any) => warnings.push(e));
+
+    sessionStore.run(session, () => {
+      emitCost(bus, "a", 4.0); // pressure 0.4
+      expect(warnings).toHaveLength(0);
+      emitCost(bus, "b", 2.0); // pressure 0.6 crosses 0.5
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0].costPressure).toBeCloseTo(0.6);
+    });
+  });
+
+  it("emits cost:warning only once", () => {
+    const session = new Session({ maxCost: 10.0, costPolicy: { warn: 0.5 } });
+    const bus = new EventBus();
+    const warnings: any[] = [];
+    bus.on("cost:warning" as any, (e: any) => warnings.push(e));
+
+    sessionStore.run(session, () => {
+      emitCost(bus, "a", 6.0); // pressure 0.6
+      emitCost(bus, "b", 2.0); // pressure 0.8
+      expect(warnings).toHaveLength(1); // only fired once
+    });
+  });
+
+  it("sets session.shouldStop at softStop threshold", () => {
+    const session = new Session({ maxCost: 10.0, costPolicy: { softStop: 0.8 } });
+    const bus = new EventBus();
+
+    sessionStore.run(session, () => {
+      expect(session.shouldStop).toBe(false);
+      emitCost(bus, "a", 9.0); // pressure 0.9 crosses 0.8
+      expect(session.shouldStop).toBe(true);
+    });
+  });
+
+  it("throws at hardStop threshold", () => {
+    const session = new Session({ maxCost: 10.0, costPolicy: { hardStop: 1.0 } });
+    const bus = new EventBus();
+
+    sessionStore.run(session, () => {
+      emitCost(bus, "a", 8.0);
+      expect(() => emitCost(bus, "b", 3.0)).toThrow("Cost limit exceeded");
+    });
+  });
+
+  it("falls back to EventBusOptions.maxCost when no Session", () => {
+    const bus = new EventBus({ maxCost: 5.0 });
+    emitCost(bus, "a", 4.0);
+    expect(() => emitCost(bus, "b", 2.0)).toThrow("Cost limit exceeded");
+  });
+
+  it("emits cost:pressure on every cost update", () => {
+    const session = new Session({ maxCost: 10.0 });
+    const bus = new EventBus();
+    const pressures: any[] = [];
+    bus.on("cost:pressure" as any, (e: any) => pressures.push(e));
+
+    sessionStore.run(session, () => {
+      emitCost(bus, "a", 3.0);
+      emitCost(bus, "b", 2.0);
+    });
+
+    expect(pressures).toHaveLength(2);
+    expect(pressures[0].costPressure).toBeCloseTo(0.3);
+    expect(pressures[1].costPressure).toBeCloseTo(0.5);
+  });
+
+  it("getCostPressure returns correct ratio", () => {
+    const session = new Session({ maxCost: 10.0 });
+    const bus = new EventBus();
+
+    sessionStore.run(session, () => {
+      emitCost(bus, "a", 3.0);
+      expect(bus.getCostPressure()).toBeCloseTo(0.3);
+    });
+  });
+
+  it("getCostPressure returns 0 when no maxCost", () => {
+    const bus = new EventBus();
+    emitCost(bus, "a", 3.0);
+    expect(bus.getCostPressure()).toBe(0);
+  });
+});
+
+describe("EventBus per-agent cost limits", () => {
+  function emitCost(bus: EventBus, agent: string, cost: number) {
+    bus.emit({ type: "agent:done", agent, result: "", cost, tokens: [100, 50], timestamp: Date.now() });
+  }
+
+  it("emits cost:agent-limit when agent exceeds limit", () => {
+    const session = new Session({
+      maxCost: 100.0,
+      agentCostLimits: { critic: 3.0 },
+      costPolicy: { hardStop: 1.0 },
+    });
+    const bus = new EventBus();
+    const limits: any[] = [];
+    bus.on("cost:agent-limit" as any, (e: any) => limits.push(e));
+
+    sessionStore.run(session, () => {
+      emitCost(bus, "critic", 2.0);
+      expect(limits).toHaveLength(0);
+      expect(() => emitCost(bus, "critic", 2.0)).toThrow("Agent cost limit exceeded");
+      expect(limits).toHaveLength(1);
+      expect(limits[0].agent).toBe("critic");
+    });
   });
 });

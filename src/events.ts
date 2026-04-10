@@ -1,3 +1,6 @@
+import { sessionStore } from "./store.js";
+import type { CostPolicy, Session } from "./session.js";
+
 export type OrchestratorEvent =
   | { type: "agent:start"; agent: string; timestamp: number }
   | {
@@ -29,7 +32,7 @@ export type OrchestratorEvent =
     }
   | { type: "step:error"; step: number; agent: string; error: string; timestamp: number }
   | { type: "round:start"; round: number; timestamp: number }
-  | { type: "round:done"; round: number; result: unknown; /** USD */ cost?: number; timestamp: number }
+  | { type: "round:done"; round: number; result: unknown; /** USD */ cost?: number; costByAgent?: Record<string, number>; timestamp: number }
   | { type: "round:error"; round: number; error: string; timestamp: number }
   | { type: "branch:start"; branch: string; timestamp: number }
   | { type: "branch:done"; branch: string; result: unknown; /** USD */ cost?: number; timestamp: number }
@@ -38,7 +41,10 @@ export type OrchestratorEvent =
   | { type: "pipeline:done"; /** USD */ totalCost: number; timestamp: number }
   | { type: "sprint:start"; index: number; definition: unknown; timestamp: number }
   | { type: "sprint:done"; index: number; result: unknown; /** USD */ cost?: number; timestamp: number }
-  | { type: "sprint:error"; index: number; error: string; timestamp: number };
+  | { type: "sprint:error"; index: number; error: string; timestamp: number }
+  | { type: "cost:warning"; costPressure: number; runningCost: number; maxCost: number; timestamp: number }
+  | { type: "cost:pressure"; costPressure: number; runningCost: number; timestamp: number }
+  | { type: "cost:agent-limit"; agent: string; agentCost: number; limit: number; timestamp: number };
 
 type EventHandler<T extends OrchestratorEvent["type"]> = (
   event: Extract<OrchestratorEvent, { type: T }>,
@@ -50,25 +56,23 @@ interface CostEntry {
 }
 
 function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
+  // Only count leaf-level cost events that represent actual LLM calls.
+  // Skip step:done, round:done, sprint:done — these are orchestrator wrappers
+  // that report the same cost already counted at the agent level.
   if (event.type === "agent:done") {
     return { cost: event.cost, agent: event.agent };
   }
   if (event.type === "agent:error" && event.cost != null) {
     return { cost: event.cost, agent: event.agent };
   }
-  if (event.type === "step:done" && event.cost != null) {
-    return { cost: event.cost, agent: event.agent };
-  }
-  if (event.type === "round:done" && event.cost != null) {
-    return { cost: event.cost, agent: `round-${event.round}` };
-  }
-  if (event.type === "sprint:done" && event.cost != null) {
-    return { cost: event.cost, agent: `sprint-${event.index}` };
-  }
   if (event.type === "branch:done" && event.cost != null) {
     return { cost: event.cost, agent: event.branch };
   }
   return null;
+}
+
+function buildCostLimitMessage(runningCost: number, maxCost: number): string {
+  return `Cost limit exceeded: $${runningCost.toFixed(2)} spent, limit is $${maxCost.toFixed(2)}`;
 }
 
 export interface EventBusOptions {
@@ -81,6 +85,8 @@ export class EventBus {
   private maxCost: number | null;
   private runningCost = 0;
   private costByAgent: Record<string, number> = {};
+  private hasWarnedCostThreshold = false;
+  private hasSoftStopped = false;
 
   constructor(options?: EventBusOptions) {
     this.maxCost = options?.maxCost ?? null;
@@ -104,27 +110,115 @@ export class EventBus {
     return { total: this.runningCost, perAgent: { ...this.costByAgent } };
   }
 
+  getCostPressure(): number {
+    const maxCost = this.resolveMaxCost();
+    if (maxCost == null || maxCost === 0) return 0;
+    return this.runningCost / maxCost;
+  }
+
+  private resolveMaxCost(): number | null {
+    return sessionStore.getStore()?.maxCost ?? this.maxCost;
+  }
+
   private trackCost(event: OrchestratorEvent): void {
     const costEntry = extractCostEntry(event);
-    if (!costEntry) {
-      return;
-    }
+    if (!costEntry) return;
 
-    this.runningCost += costEntry.cost;
-    this.costByAgent[costEntry.agent] = (this.costByAgent[costEntry.agent] ?? 0) + costEntry.cost;
+    this.accumulateCost(costEntry);
 
-    if (this.maxCost != null && this.runningCost > this.maxCost) {
-      throw new Error(
-        `Cost limit exceeded: $${this.runningCost.toFixed(2)} spent, limit is $${this.maxCost.toFixed(2)}`,
-      );
+    const session = sessionStore.getStore();
+    const maxCost = session?.maxCost ?? this.maxCost;
+
+    if (maxCost == null) return;
+
+    const policy = session?.costPolicy;
+
+    if (policy) {
+      this.applyGraduatedPolicy(session, costEntry, policy, maxCost);
+    } else if (this.runningCost > maxCost) {
+      // Fallback: no Session, use EventBusOptions.maxCost hard-stop (backward compat)
+      throw new Error(buildCostLimitMessage(this.runningCost, maxCost));
     }
+  }
+
+  private accumulateCost(entry: CostEntry): void {
+    this.runningCost += entry.cost;
+    this.costByAgent[entry.agent] = (this.costByAgent[entry.agent] ?? 0) + entry.cost;
+  }
+
+  private applyGraduatedPolicy(session: Session, entry: CostEntry, policy: CostPolicy, maxCost: number): void {
+    const costPressure = this.runningCost / maxCost;
+
+    this.emitCostPressure(costPressure);
+    this.checkAgentLimit(session, entry);
+    this.checkWarnThreshold(policy, costPressure, maxCost);
+    this.checkSoftStopThreshold(session, policy, costPressure);
+    this.checkHardStopThreshold(policy, costPressure, maxCost);
+  }
+
+  private emitCostPressure(costPressure: number): void {
+    this.emitWithoutCostTracking({
+      type: "cost:pressure",
+      costPressure,
+      runningCost: this.runningCost,
+      timestamp: Date.now(),
+    });
+  }
+
+  private checkWarnThreshold(policy: CostPolicy, costPressure: number, maxCost: number): void {
+    if (policy.warn == null || costPressure < policy.warn || this.hasWarnedCostThreshold) return;
+
+    this.hasWarnedCostThreshold = true;
+    this.emitWithoutCostTracking({
+      type: "cost:warning",
+      costPressure,
+      runningCost: this.runningCost,
+      maxCost,
+      timestamp: Date.now(),
+    });
+  }
+
+  private checkSoftStopThreshold(session: Session, policy: CostPolicy, costPressure: number): void {
+    if (policy.softStop == null || costPressure < policy.softStop || this.hasSoftStopped) return;
+
+    this.hasSoftStopped = true;
+    session.shouldStop = true;
+  }
+
+  private checkHardStopThreshold(policy: CostPolicy, costPressure: number, maxCost: number): void {
+    if (policy.hardStop != null && costPressure >= policy.hardStop) {
+      throw new Error(buildCostLimitMessage(this.runningCost, maxCost));
+    }
+  }
+
+  private checkAgentLimit(session: Session, entry: CostEntry): void {
+    const limit = session.agentCostLimits[entry.agent];
+    if (limit == null) return;
+
+    const agentCost = this.costByAgent[entry.agent] ?? 0;
+    if (agentCost <= limit) return;
+
+    this.emitWithoutCostTracking({
+      type: "cost:agent-limit",
+      agent: entry.agent,
+      agentCost,
+      limit,
+      timestamp: Date.now(),
+    });
+    throw new Error(
+      `Agent cost limit exceeded: agent "${entry.agent}" spent $${agentCost.toFixed(2)}, limit is $${limit.toFixed(2)}`,
+    );
+  }
+
+  /** Emit an event without re-entering trackCost (avoids infinite recursion for cost events). */
+  private emitWithoutCostTracking(event: OrchestratorEvent): void {
+    this.history.push(event);
+    this.dispatchToHandlers(event);
   }
 
   private dispatchToHandlers(event: OrchestratorEvent): void {
     const handlers = this.handlersByType.get(event.type);
-    if (!handlers) {
-      return;
-    }
+    if (!handlers) return;
 
     for (const handler of handlers) {
       try {

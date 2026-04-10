@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 export interface SprintOptions {
   retryPolicy?: RetryPolicy;
@@ -28,12 +29,13 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
     this._lastMetrics = null;
 
     const accumulated = createMetrics();
-    const definitions = this.extractSprintDefinitions(input);
+    const items = this.resolveSprintItems(input);
     const sprintResults: TOut[] = [];
 
     try {
-      for (let index = 0; index < definitions.length; index++) {
-        const result = await this.runSprintItem(index, definitions[index], accumulated);
+      for (const [index, item] of items.entries()) {
+        if (isStopped()) break;
+        const result = await this.runSprintItem(index, item, accumulated);
         sprintResults.push(result);
       }
 
@@ -48,13 +50,13 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
 
   private async runSprintItem(
     index: number,
-    definition: unknown,
+    item: unknown,
     accumulated: MetricsAccumulator,
   ): Promise<TOut> {
-    this.eventBus?.emit({ type: "sprint:start", index, definition, timestamp: Date.now() });
+    this.eventBus?.emit({ type: "sprint:start", index, definition: item, timestamp: Date.now() });
 
     try {
-      const result = await runWithOptionalRetry(this.runner, definition, this.retryPolicy, this.eventBus);
+      const result = await runWithOptionalRetry(this.runner, item, this.retryPolicy, this.eventBus);
 
       const metrics = this.runner.lastMetrics;
       accumulateMetrics(accumulated, metrics);
@@ -67,7 +69,7 @@ export class Sprint<TIn = unknown, TOut = unknown> implements Runnable<TIn, { sp
     }
   }
 
-  private extractSprintDefinitions(input: unknown): unknown[] {
+  private resolveSprintItems(input: unknown): unknown[] {
     if (input == null || typeof input !== "object") return [];
     return (input as Record<string, unknown>).sprints as unknown[] ?? [];
   }

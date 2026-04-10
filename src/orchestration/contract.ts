@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy } from "../events.js";
 import type { MetricsAccumulator } from "../utils.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { findJsonString, createMetrics, accumulateMetrics } from "../utils.js";
+import { isStopped } from "../store.js";
 
 const DEFAULT_MAX_ROUNDS = 3;
 
@@ -20,7 +21,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
   private maxRounds: number;
   private retryPolicy: RetryPolicy | null;
   private eventBus: EventBus | null;
-  private customIsAccepted: ((review: TReview) => boolean) | null = null;
+  private isAcceptedFn: ((review: TReview) => boolean) | null = null;
   private _lastMetrics: MetricsAccumulator | null = null;
   private _lastProposal: TProposal | null = null;
   private _lastReviewerResult: TReview | null = null;
@@ -29,7 +30,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
     this.proposer = proposer;
     this.reviewer = reviewer;
     this.maxRounds = options?.maxRounds ?? DEFAULT_MAX_ROUNDS;
-    this.customIsAccepted = options?.isAccepted ?? null;
+    this.isAcceptedFn = options?.isAccepted ?? null;
     this.retryPolicy = options?.retryPolicy ?? null;
     this.eventBus = options?.eventBus ?? null;
   }
@@ -45,6 +46,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
 
     try {
       for (let round = 0; round < this.maxRounds; round++) {
+        if (isStopped()) break;
         this.eventBus?.emit({ type: "round:start", round, timestamp: Date.now() });
 
         const review = await this.executeRound(round, proposalInput, accumulated);
@@ -91,14 +93,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
       const reviewerMetrics = this.reviewer.lastMetrics;
       accumulateMetrics(accumulated, reviewerMetrics);
 
-      const roundCost = (proposerMetrics?.cost ?? 0) + (reviewerMetrics?.cost ?? 0);
-      this.eventBus?.emit({
-        type: "round:done",
-        round,
-        result: review,
-        cost: roundCost || undefined,
-        timestamp: Date.now(),
-      });
+      this.emitRoundDone(round, review, proposerMetrics, reviewerMetrics);
 
       return review;
     } catch (err: unknown) {
@@ -110,6 +105,23 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
       });
       throw new Error(`[Contract:round-${round + 1}] ${errorMessage(err)}`);
     }
+  }
+
+  private emitRoundDone(
+    round: number,
+    review: TReview,
+    proposerMetrics: MetricsAccumulator | null | undefined,
+    reviewerMetrics: MetricsAccumulator | null | undefined,
+  ): void {
+    const roundCost = (proposerMetrics?.cost ?? 0) + (reviewerMetrics?.cost ?? 0);
+    this.eventBus?.emit({
+      type: "round:done",
+      round,
+      result: review,
+      cost: roundCost || undefined,
+      costByAgent: this.eventBus ? { ...this.eventBus.getCostSummary().perAgent } : undefined,
+      timestamp: Date.now(),
+    });
   }
 
   private parseReview(review: unknown): TReview {
@@ -124,7 +136,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
   }
 
   private isAccepted(review: TReview): boolean {
-    if (this.customIsAccepted) return this.customIsAccepted(review);
+    if (this.isAcceptedFn) return this.isAcceptedFn(review);
     if (review == null || typeof review !== "object") return false;
     const accepted = (review as Record<string, unknown>).accepted;
     return typeof accepted === "boolean" && accepted;

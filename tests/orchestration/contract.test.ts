@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Contract } from "../../src/orchestration/contract.js";
+import { sessionStore } from "../../src/store.js";
+import type { Runnable } from "../../src/types.js";
 
 class FakeAgentWithMetrics {
   name: string;
@@ -101,5 +103,45 @@ describe("Contract", () => {
     expect(result.plan).toBe("v1");
     expect((contract.lastEvaluatorResult as any).accepted).toBe(false);
     expect((contract.lastEvaluatorResult as any).feedback).toBe("rejected");
+  });
+});
+
+describe("Contract shouldStop", () => {
+  it("stops early when shouldStop is true", async () => {
+    let proposerCalls = 0;
+    const proposer: Runnable<any, string> = {
+      name: "proposer", lastMetrics: null,
+      async run() {
+        proposerCalls++;
+        const session = sessionStore.getStore();
+        if (session && proposerCalls >= 2) session.shouldStop = true;
+        return "proposal";
+      },
+    };
+    const reviewer: Runnable<string, any> = {
+      name: "reviewer", lastMetrics: null,
+      async run() { return { accepted: false }; },
+    };
+
+    const session = { shouldStop: false } as any;
+    const contract = new Contract(proposer, reviewer, { maxRounds: 10 });
+    await sessionStore.run(session, () => contract.run("input"));
+    expect(proposerCalls).toBe(2);
+  });
+
+  it("runs all rounds when no Session", async () => {
+    let rounds = 0;
+    const proposer: Runnable<any, string> = {
+      name: "proposer", lastMetrics: null,
+      async run() { rounds++; return "p"; },
+    };
+    const reviewer: Runnable<string, any> = {
+      name: "reviewer", lastMetrics: null,
+      async run() { return { accepted: false }; },
+    };
+
+    const contract = new Contract(proposer, reviewer, { maxRounds: 3 });
+    await contract.run("input");
+    expect(rounds).toBe(3);
   });
 });

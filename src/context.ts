@@ -1,6 +1,6 @@
 import type { OutputFormatter } from "./cli/output.js";
 import type { Session } from "./session.js";
-import { sessionStore } from "./session.js";
+import { sessionStore } from "./store.js";
 import type { SkillRegistry } from "./tools/skills.js";
 
 // Global fallbacks used when no AsyncLocalStorage session is active.

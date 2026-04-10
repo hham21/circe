@@ -8,6 +8,11 @@ import { Pipeline } from "../src/orchestration/pipeline.js";
 import { Loop } from "../src/orchestration/loop.js";
 import { Parallel } from "../src/orchestration/parallel.js";
 import { Contract } from "../src/orchestration/contract.js";
+import { pipe } from "../src/orchestration/index.js";
+import { map } from "../src/orchestration/map.js";
+import { EventBus } from "../src/events.js";
+import { Session } from "../src/session.js";
+import type { Runnable } from "../src/types.js";
 
 describe("integration: nested orchestrators", () => {
   it("Pipeline containing Loop", async () => {
@@ -111,5 +116,96 @@ describe("integration: nested orchestrators", () => {
     // Contract returns proposal on accepted, Loop returns producer output on stopWhen
     // Contract proposal goes into Loop as input; Loop returns producer output ("built")
     expect(result).toBe("built");
+  });
+});
+
+describe("pipe + map integration", () => {
+  it("transforms ParallelResult to string via map in pipeline", async () => {
+    const agentA: Runnable<string, string> = {
+      name: "a",
+      lastMetrics: null,
+      async run() {
+        return "hello";
+      },
+    };
+    const agentB: Runnable<string, string> = {
+      name: "b",
+      lastMetrics: null,
+      async run() {
+        return "world";
+      },
+    };
+    const parallel = new Parallel(agentA, agentB, { throwOnError: false });
+
+    const summarize = map((r: Record<string, any>) => {
+      return Object.entries(r)
+        .filter(([, v]) => v.status === "fulfilled")
+        .map(([k, v]) => `${k}: ${v.value}`)
+        .join(", ");
+    });
+
+    const consumer: Runnable<string, string> = {
+      name: "consumer",
+      lastMetrics: null,
+      async run(input) {
+        return `Got: ${input}`;
+      },
+    };
+
+    const pipeline = pipe(parallel, summarize, consumer);
+    const result = await pipeline.run("go");
+    expect(result).toContain("Got:");
+    expect(result).toContain("hello");
+    expect(result).toContain("world");
+  });
+});
+
+describe("graduated cost policy integration", () => {
+  it("Session costPolicy triggers warning and softStop via EventBus", async () => {
+    const session = new Session({
+      outputDir: "/tmp/circe-test-" + Date.now(),
+      maxCost: 1.0,
+      costPolicy: { warn: 0.5, softStop: 0.8, hardStop: 1.0 },
+    });
+    const bus = new EventBus();
+    const warnings: any[] = [];
+    bus.on("cost:warning" as any, (e: any) => warnings.push(e));
+
+    let step2Ran = false;
+    const step1: Runnable<string, string> = {
+      name: "step1",
+      lastMetrics: { cost: 0.6, inputTokens: 100, outputTokens: 50 },
+      async run() {
+        bus.emit({
+          type: "agent:done",
+          agent: "step1",
+          result: "",
+          cost: 0.6,
+          tokens: [100, 50],
+          timestamp: Date.now(),
+        });
+        return "s1";
+      },
+    };
+    const step2: Runnable<string, string> = {
+      name: "step2",
+      lastMetrics: null,
+      async run() {
+        step2Ran = true;
+        return "s2";
+      },
+    };
+
+    const pipeline = pipe(step1, step2, { eventBus: bus });
+
+    const result = await session.run(() => pipeline.run("input"));
+
+    // warn at 0.5 was crossed (0.6 pressure)
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    // softStop at 0.8 was not crossed (only 0.6)
+    expect(session.shouldStop).toBe(false);
+    // Both steps ran
+    expect(step2Ran).toBe(true);
+    expect(result).toBe("s2");
   });
 });

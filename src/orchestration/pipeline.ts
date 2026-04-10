@@ -3,6 +3,7 @@ import type { EventBus, RetryPolicy, OrchestratorEvent } from "../events.js";
 import { runWithOptionalRetry, errorMessage } from "../events.js";
 import { parseTrailingOptions, createMetrics, accumulateMetrics } from "../utils.js";
 import type { MetricsAccumulator } from "../utils.js";
+import { isStopped } from "../store.js";
 
 export interface PipelineOptions {
   retryPolicy?: RetryPolicy;
@@ -27,25 +28,28 @@ export class Pipeline<TIn = unknown, TOut = unknown> implements Runnable<TIn, TO
     this.eventBus = options.eventBus ?? null;
   }
 
-  get lastMetrics() { return this._lastMetrics; }
+  get lastMetrics() {
+    return this._lastMetrics;
+  }
 
   async run(input: TIn): Promise<TOut> {
     this._lastMetrics = null;
-    const accumulated = createMetrics();
-    let stepOutput: unknown = input;
+    const accumulatedMetrics = createMetrics();
+    let currentOutput: unknown = input;
 
     try {
       for (let i = 0; i < this.agents.length; i++) {
-        stepOutput = await this.runStep(this.agents[i], i, stepOutput);
-        accumulateMetrics(accumulated, this.agents[i].lastMetrics);
+        if (isStopped()) break;
+        currentOutput = await this.runStep(this.agents[i], i, currentOutput);
+        accumulateMetrics(accumulatedMetrics, this.agents[i].lastMetrics);
       }
 
-      this._lastMetrics = { ...accumulated };
+      this._lastMetrics = { ...accumulatedMetrics };
       this.emitPipelineDone();
 
-      return stepOutput as TOut;
+      return currentOutput as TOut;
     } finally {
-      this.finalizeMetrics(accumulated);
+      this.finalizeMetrics(accumulatedMetrics);
     }
   }
 
@@ -114,9 +118,9 @@ export class Pipeline<TIn = unknown, TOut = unknown> implements Runnable<TIn, TO
     return { lastCompletedStep: -1, lastOutput: input };
   }
 
-  private finalizeMetrics(accumulated: MetricsAccumulator): void {
+  private finalizeMetrics(accumulatedMetrics: MetricsAccumulator): void {
     if (!this._lastMetrics) {
-      this._lastMetrics = { ...accumulated };
+      this._lastMetrics = { ...accumulatedMetrics };
     }
   }
 
