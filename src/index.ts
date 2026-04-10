@@ -6,6 +6,7 @@ export {
   defaultBackoff,
   type OrchestratorEvent,
   type RetryPolicy,
+  type EventBusOptions,
 } from "./events.js";
 export {
   findJsonString,
