@@ -1,6 +1,10 @@
 import chalk from "chalk";
 import { appendFileSync, writeFileSync } from "node:fs";
 
+export type LogLevel = "info" | "debug" | "trace";
+
+const LEVEL_RANK: Record<LogLevel, number> = { info: 1, debug: 2, trace: 3 };
+
 const AGENT_COLORS: Record<string, (s: string) => string> = {
   planner: chalk.cyan,
   generator: chalk.yellow,
@@ -14,6 +18,7 @@ const AGENT_COLORS: Record<string, (s: string) => string> = {
 
 const AGENT_LABEL_WIDTH = 14;
 const RESULT_PREVIEW_MAX_LENGTH = 50;
+const TOOL_RESULT_MAX_LENGTH = 500;
 const TOKEN_COMPACT_THRESHOLD = 1000;
 
 function formatTokenCount(n: number): string {
@@ -25,12 +30,16 @@ function truncate(text: string, maxLength: number, ellipsis: string): string {
   return text.length > maxLength ? text.slice(0, maxLength) + ellipsis : text;
 }
 
+function timestamp(): string {
+  return new Date().toISOString();
+}
+
 export class OutputFormatter {
-  private verbose: boolean;
+  readonly logLevel: LogLevel | undefined;
   private logPath: string | null = null;
 
-  constructor(verbose = false) {
-    this.verbose = verbose;
+  constructor(logLevel?: LogLevel) {
+    this.logLevel = logLevel;
   }
 
   setLogFile(path: string): void {
@@ -52,29 +61,72 @@ export class OutputFormatter {
     tokens?: [number, number] | null,
     cost?: number | null,
   ): void {
+    const ts = timestamp();
     const label = this.agentLabel(name);
     const preview = this.buildResultPreview(result);
     const metaParts = this.buildMetaParts(tokens, cost);
 
-    console.log(`${label}  ${chalk.white(preview)}  ${metaParts.join("  ")}`);
-    this.writeLog(`[${name}] ${preview} | ${tokens?.[0]}/${tokens?.[1]} | $${cost?.toFixed(4)}`);
+    console.log(`${chalk.dim(ts)} ${label}  ${chalk.white(preview)}  ${metaParts.join("  ")}`);
+    this.writeLog(`[${name}] ${preview} | ${tokens?.[0]}/${tokens?.[1]} | $${cost?.toFixed(4)}`, ts);
   }
 
   logInfo(message: string): void {
-    console.log(chalk.gray(`\n── ${message} ──`));
-    this.writeLog(`[info] ${message}`);
+    const ts = timestamp();
+    console.log(chalk.gray(`\n${ts} ── ${message} ──`));
+    this.writeLog(`[info] ${message}`, ts);
   }
 
   logActivity(agentName: string, message: string): void {
-    if (!this.verbose) return;
+    if (!this.isEnabled("info")) return;
+    const ts = timestamp();
     const label = this.agentLabel(agentName);
-    console.log(chalk.dim(`${label}  ${message}`));
-    this.writeLog(`[${agentName}] ${message}`);
+    console.log(chalk.dim(`${ts} ${label}  ${message}`));
+    this.writeLog(`[${agentName}] ${message}`, ts);
+  }
+
+  logToolCall(agentName: string, toolName: string, input: Record<string, unknown>): void {
+    if (!this.isEnabled("info")) return;
+
+    const ts = timestamp();
+    const label = this.agentLabel(agentName);
+
+    if (this.isEnabled("debug")) {
+      const args = JSON.stringify(input);
+      console.log(chalk.dim(`${ts} ${label}  ${toolName} ${args}`));
+      this.writeLog(`[${agentName}] ${toolName} ${args}`, ts);
+    } else {
+      const summary = this.summarizeToolInput(toolName, input);
+      console.log(chalk.dim(`${ts} ${label}  ${summary}`));
+      this.writeLog(`[${agentName}] ${summary}`, ts);
+    }
+  }
+
+  logToolResult(agentName: string, toolName: string, result: string): void {
+    if (!this.isEnabled("debug")) return;
+
+    const ts = timestamp();
+    const label = this.agentLabel(agentName);
+    const display = this.isEnabled("trace")
+      ? result
+      : truncate(result, TOOL_RESULT_MAX_LENGTH, "...");
+
+    console.log(chalk.dim(`${ts} ${label}  <- ${toolName} ${display}`));
+    this.writeLog(`[${agentName}] <- ${toolName} ${display}`, ts);
+  }
+
+  logThinking(agentName: string, text: string): void {
+    if (!this.isEnabled("trace")) return;
+
+    const ts = timestamp();
+    const label = this.agentLabel(agentName);
+    console.log(chalk.dim(`${ts} ${label}  [thinking] ${text}`));
+    this.writeLog(`[${agentName}] [thinking] ${text}`, ts);
   }
 
   logResult(result: string): void {
-    console.log(chalk.green(`\nResult: ${result}`));
-    this.writeLog(`[result] ${result}`);
+    const ts = timestamp();
+    console.log(chalk.green(`\n${ts} Result: ${result}`));
+    this.writeLog(`[result] ${result}`, ts);
   }
 
   finalSummary(outputDir: string, totalDuration: number): void {
@@ -84,7 +136,7 @@ export class OutputFormatter {
     this.writeLog(`\nOutput: ${outputDir}\nDuration: ${duration}`);
   }
 
-  private formatDuration(seconds: number): string {
+  formatDuration(seconds: number): string {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
@@ -94,6 +146,19 @@ export class OutputFormatter {
     if (m > 0) parts.push(`${m}m`);
     parts.push(`${s}s`);
     return parts.join(" ");
+  }
+
+  private isEnabled(level: LogLevel): boolean {
+    if (!this.logLevel) return false;
+    return LEVEL_RANK[this.logLevel] >= LEVEL_RANK[level];
+  }
+
+  private summarizeToolInput(toolName: string, input: Record<string, unknown>): string {
+    if (toolName === "Bash" && input.command) return `$ ${input.command}`;
+    if (toolName === "Read" && input.file_path) return `Read ${input.file_path}`;
+    if (toolName === "Write" && input.file_path) return `Write ${input.file_path}`;
+    if (toolName === "Edit" && input.file_path) return `Edit ${input.file_path}`;
+    return toolName;
   }
 
   private buildResultPreview(result: string): string {
@@ -117,9 +182,9 @@ export class OutputFormatter {
     return colorFn(`[${name}]`.padEnd(AGENT_LABEL_WIDTH));
   }
 
-  private writeLog(text: string): void {
+  private writeLog(text: string, ts?: string): void {
     if (this.logPath) {
-      appendFileSync(this.logPath, text + "\n");
+      appendFileSync(this.logPath, `${ts ?? timestamp()} ${text}\n`);
     }
   }
 }
