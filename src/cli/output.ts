@@ -71,6 +71,11 @@ export class OutputFormatter {
 
     console.log(`${chalk.dim(ts)} ${label}  ${chalk.white(preview)}  ${metaParts.join("  ")}`);
     this.writeLog(`[${name}] ${preview} | ${tokens?.[0]}/${tokens?.[1]} | $${cost?.toFixed(4)}`, ts);
+
+    if (this.isEnabled("trace") && result) {
+      console.log(chalk.dim(`${ts} ${label}  >> ${result}`));
+      this.writeLog(`[${name}] >> ${result}`, ts);
+    }
   }
 
   logInfo(message: string): void {

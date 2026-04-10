@@ -249,3 +249,74 @@ describe("logThinking", () => {
     expect(content).toContain("Let me analyze the code structure");
   });
 });
+
+describe("agentDone full result at trace level", () => {
+  let tempDir: string;
+  let logPath: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "circe-output-"));
+    logPath = join(tempDir, "circe.log");
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const longResult = "This is a very long result that exceeds fifty characters so truncation will apply to the summary preview line";
+
+  it("info level: only 50-char preview, no full result line", () => {
+    const fmt = new OutputFormatter("info");
+    fmt.setLogFile(logPath);
+    fmt.agentDone("planner", longResult, [100, 50], 0.05);
+    fmt.close();
+
+    const content = readFileSync(logPath, "utf-8");
+    expect(content).toContain("…");
+    expect(content).not.toContain(">> This is a very long result");
+    expect(content).not.toContain("truncation will apply");
+  });
+
+  it("debug level: only 50-char preview, no full result line", () => {
+    const fmt = new OutputFormatter("debug");
+    fmt.setLogFile(logPath);
+    fmt.agentDone("planner", longResult, [100, 50], 0.05);
+    fmt.close();
+
+    const content = readFileSync(logPath, "utf-8");
+    expect(content).toContain("…");
+    expect(content).not.toContain(">> This is a very long result");
+  });
+
+  it("trace level: preview + full result line", () => {
+    const fmt = new OutputFormatter("trace");
+    fmt.setLogFile(logPath);
+    fmt.agentDone("planner", longResult, [100, 50], 0.05);
+    fmt.close();
+
+    const content = readFileSync(logPath, "utf-8");
+    expect(content).toContain("…");
+    expect(content).toContain(">> " + longResult);
+  });
+
+  it("trace level: skips full result line when result is empty", () => {
+    const fmt = new OutputFormatter("trace");
+    fmt.setLogFile(logPath);
+    fmt.agentDone("planner", "", [100, 50], 0.05);
+    fmt.close();
+
+    const content = readFileSync(logPath, "utf-8");
+    expect(content).not.toContain(">> ");
+  });
+
+  it("no logLevel: agentDone summary still prints but no full result line", () => {
+    const fmt = new OutputFormatter();
+    fmt.setLogFile(logPath);
+    fmt.agentDone("planner", longResult, [100, 50], 0.05);
+    fmt.close();
+
+    const content = readFileSync(logPath, "utf-8");
+    expect(content).toContain("[planner]");
+    expect(content).not.toContain(">> ");
+  });
+});
