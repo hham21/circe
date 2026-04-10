@@ -1,7 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
-import { EventBus, defaultShouldRetry, defaultBackoff, executeWithRetry } from "../src/events.js";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EventBus, defaultShouldRetry, defaultBackoff, executeWithRetry, runWithOptionalRetry } from "../src/events.js";
 import { sessionStore } from "../src/store.js";
 import { Session } from "../src/session.js";
+import { Agent } from "../src/agent.js";
+import { Pipeline } from "../src/orchestration/pipeline.js";
+
+vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
+  query: vi.fn(),
+}));
 
 describe("EventBus", () => {
   it("records events in history", () => {
@@ -335,5 +341,72 @@ describe("EventBus per-agent cost limits", () => {
       expect(limits).toHaveLength(1);
       expect(limits[0].agent).toBe("critic");
     });
+  });
+});
+
+describe("runWithOptionalRetry leaf agent:done emission", () => {
+  beforeEach(async () => {
+    const { query } = await import("@anthropic-ai/claude-agent-sdk");
+    (query as any).mockReset();
+    (query as any).mockImplementation(() => ({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: "result",
+          result: "mock output",
+          total_cost_usd: 0.05,
+          usage: { input_tokens: 100, output_tokens: 50 },
+        };
+      },
+    }));
+  });
+
+  it("emits agent:done for a real Agent instance", async () => {
+    const agent = new Agent({ name: "solo", prompt: "" });
+    const bus = new EventBus();
+
+    await runWithOptionalRetry(agent, "input", null, bus);
+
+    const done = bus.history.find((e) => e.type === "agent:done") as any;
+    expect(done).toBeDefined();
+    expect(done.agent).toBe("solo");
+    expect(done.cost).toBe(0.05);
+    expect(bus.getCostSummary().total).toBeCloseTo(0.05);
+  });
+
+  it("does not emit agent:done for runnables without lastMetrics", async () => {
+    const fake = { name: "fake", async run(i: string) { return i + "!"; } };
+    const bus = new EventBus();
+
+    await runWithOptionalRetry(fake as any, "hi", null, bus);
+
+    expect(bus.history.find((e) => e.type === "agent:done")).toBeUndefined();
+    expect(bus.getCostSummary().total).toBe(0);
+  });
+
+  it("Pipeline with real Agents populates getCostSummary", async () => {
+    const a = new Agent({ name: "a", prompt: "" });
+    const b = new Agent({ name: "b", prompt: "" });
+    const bus = new EventBus();
+    const pipeline = new Pipeline(a, b, { eventBus: bus });
+
+    await pipeline.run("input");
+
+    const summary = bus.getCostSummary();
+    expect(summary.total).toBeCloseTo(0.10);
+    expect(summary.perAgent).toEqual({ a: 0.05, b: 0.05 });
+  });
+
+  it("nested Pipelines do not double-count — leaf detection skips composite level", async () => {
+    const a = new Agent({ name: "a", prompt: "" });
+    const b = new Agent({ name: "b", prompt: "" });
+    const bus = new EventBus();
+    const innerPipeline = new Pipeline(a, b, { eventBus: bus });
+    const outerPipeline = new Pipeline(innerPipeline, { eventBus: bus });
+
+    await outerPipeline.run("input");
+
+    const agentDoneEvents = bus.history.filter((e) => e.type === "agent:done");
+    expect(agentDoneEvents).toHaveLength(2);
+    expect(bus.getCostSummary().total).toBeCloseTo(0.10);
   });
 });
