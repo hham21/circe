@@ -17,7 +17,7 @@ const AGENT_COLORS: Record<string, (s: string) => string> = {
 };
 
 const AGENT_LABEL_WIDTH = 14;
-const RESULT_PREVIEW_MAX_LENGTH = 50;
+const RESULT_PREVIEW_MAX_LENGTH = 80;
 const TOOL_RESULT_MAX_LENGTH = 500;
 const TOKEN_COMPACT_THRESHOLD = 1000;
 

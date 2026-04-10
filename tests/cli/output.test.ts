@@ -265,7 +265,7 @@ describe("agentDone full result at trace level", () => {
 
   const longResult = "This is a very long result that exceeds fifty characters so truncation will apply to the summary preview line";
 
-  it("info level: only 50-char preview, no full result line", () => {
+  it("info level: only preview, no full result line", () => {
     const fmt = new OutputFormatter("info");
     fmt.setLogFile(logPath);
     fmt.agentDone("planner", longResult, [100, 50], 0.05);
@@ -277,7 +277,7 @@ describe("agentDone full result at trace level", () => {
     expect(content).not.toContain("truncation will apply");
   });
 
-  it("debug level: only 50-char preview, no full result line", () => {
+  it("debug level: only preview, no full result line", () => {
     const fmt = new OutputFormatter("debug");
     fmt.setLogFile(logPath);
     fmt.agentDone("planner", longResult, [100, 50], 0.05);
