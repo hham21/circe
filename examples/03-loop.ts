@@ -11,7 +11,7 @@ import { Agent, Loop, QAReportSchema, EventBus, OutputFormatter, setFormatter } 
 
 // Enable verbose output to see full agent responses
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 const writer = new Agent({
   name: "writer",

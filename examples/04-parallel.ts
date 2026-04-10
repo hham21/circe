@@ -11,7 +11,7 @@ import type { Runnable } from "../src/index.js";
 import { Agent, Parallel, EventBus, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 const optimist = new Agent({
   name: "optimist",

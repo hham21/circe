@@ -12,7 +12,7 @@ import { Agent, SkillRegistry, setSkillRegistry, OutputFormatter, setFormatter }
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 

@@ -9,7 +9,7 @@
 import { Agent, OutputFormatter, setFormatter } from "../src/index.js";
 
 const verbose = process.argv.includes("--verbose");
-if (verbose) setFormatter(new OutputFormatter(true));
+if (verbose) setFormatter(new OutputFormatter("debug"));
 
 const agent = new Agent({
   name: "echo",
