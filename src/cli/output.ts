@@ -23,6 +23,8 @@ const KIND_LABEL_WIDTH = 11;
 const RESULT_PREVIEW_MAX_LENGTH = 80;
 const TOOL_RESULT_MAX_LENGTH = 500;
 const TOKEN_COMPACT_THRESHOLD = 1000;
+const COST_DISPLAY_DECIMALS = 4;
+const STRUCTURED_OUTPUT_RESULT = "ok";
 
 function formatTokenCount(n: number): string {
   if (n >= TOKEN_COMPACT_THRESHOLD) return `${(n / TOKEN_COMPACT_THRESHOLD).toFixed(1)}k`;
@@ -98,10 +100,7 @@ export class OutputFormatter {
   }
 
   agentStart(name: string, _description: string): void {
-    const terminalLine = this.formatLine(formatLocalTime(), name, "start", "");
-    const fileLine = this.formatLine(timestamp(), name, "start", "", undefined, { color: false });
-    console.log(terminalLine);
-    this.writeLog(fileLine);
+    this.emit(name, "start", "", "");
   }
 
   agentDone(
@@ -110,33 +109,17 @@ export class OutputFormatter {
     tokens?: [number, number] | null,
     cost?: number | null,
   ): void {
-    const rawResult = result ?? "";
-    const preview = summarizeStructured(rawResult) ?? this.buildResultPreview(rawResult);
+    const preview = summarizeStructured(result) ?? this.buildResultPreview(result);
     const meta = this.buildMetaParts(tokens, cost);
-    const metaPlain = meta.plain.join("  ");
-    const metaColored = meta.colored.join("  ");
 
-    const terminalMain = this.formatLine(
-      formatLocalTime(),
-      name,
-      "done",
-      chalk.white(preview),
-      metaColored || undefined,
-    );
-    const fileMain = this.formatLine(timestamp(), name, "done", preview, metaPlain || undefined, {
-      color: false,
+    this.emit(name, "done", chalk.white(preview), preview, {
+      terminal: meta.colored.join("  "),
+      file: meta.plain.join("  "),
     });
-    console.log(terminalMain);
-    this.writeLog(fileMain);
 
-    if (this.isEnabled("trace") && rawResult) {
-      const oneLine = compactWhitespace(rawResult);
-      const terminalExtra = this.formatLine(formatLocalTime(), name, "done", chalk.dim(oneLine));
-      const fileExtra = this.formatLine(timestamp(), name, "done", oneLine, undefined, {
-        color: false,
-      });
-      console.log(terminalExtra);
-      this.writeLog(fileExtra);
+    if (this.isEnabled("trace") && result) {
+      const oneLine = compactWhitespace(result);
+      this.emit(name, "done", chalk.dim(oneLine), oneLine);
     }
   }
 
@@ -160,17 +143,7 @@ export class OutputFormatter {
       content = this.summarizeToolInput(toolName, input);
     }
 
-    const terminalLine = this.formatLine(
-      formatLocalTime(),
-      agentName,
-      "call",
-      chalk.dim(content),
-    );
-    const fileLine = this.formatLine(timestamp(), agentName, "call", content, undefined, {
-      color: false,
-    });
-    console.log(terminalLine);
-    this.writeLog(fileLine);
+    this.emit(agentName, "call", chalk.dim(content), content);
   }
 
   logToolResult(agentName: string, toolName: string, result: string): void {
@@ -178,7 +151,7 @@ export class OutputFormatter {
 
     let compactResult: string;
     if (toolName === "StructuredOutput") {
-      compactResult = "ok";
+      compactResult = STRUCTURED_OUTPUT_RESULT;
     } else if (this.isEnabled("trace")) {
       compactResult = compactWhitespace(result);
     } else {
@@ -186,42 +159,24 @@ export class OutputFormatter {
     }
 
     const content = `${toolName} ${compactResult}`;
-    const terminalLine = this.formatLine(
-      formatLocalTime(),
-      agentName,
-      "result",
-      chalk.dim(content),
-    );
-    const fileLine = this.formatLine(timestamp(), agentName, "result", content, undefined, {
-      color: false,
-    });
-    console.log(terminalLine);
-    this.writeLog(fileLine);
+    this.emit(agentName, "result", chalk.dim(content), content);
   }
 
   logThinking(agentName: string, text: string): void {
     if (!this.isEnabled("trace")) return;
-
-    const terminalLine = this.formatLine(
-      formatLocalTime(),
-      agentName,
-      "thinking",
-      chalk.dim(text),
-    );
-    const fileContent = compactWhitespace(text);
-    const fileLine = this.formatLine(timestamp(), agentName, "thinking", fileContent, undefined, {
-      color: false,
-    });
-    console.log(terminalLine);
-    this.writeLog(fileLine);
+    this.emit(agentName, "thinking", chalk.dim(text), compactWhitespace(text));
   }
 
   logResult(result: string): void {
-    const resultCompact = compactWhitespace(result);
     console.log(`\n${chalk.dim(formatLocalTime())} ${chalk.green(`Result: ${result}`)}`);
-    const fileLine = this.formatLine(timestamp(), null, "final", resultCompact, undefined, {
-      color: false,
-    });
+    const fileLine = this.formatLine(
+      timestamp(),
+      null,
+      "final",
+      compactWhitespace(result),
+      undefined,
+      { color: false },
+    );
     this.writeLog(fileLine);
   }
 
@@ -279,7 +234,7 @@ export class OutputFormatter {
       colored.push(chalk.gray(tokenStr));
     }
     if (cost != null) {
-      const costStr = `$${cost.toFixed(4)}`;
+      const costStr = `$${cost.toFixed(COST_DISPLAY_DECIMALS)}`;
       plain.push(costStr);
       colored.push(chalk.yellow(costStr));
     }
@@ -312,6 +267,32 @@ export class OutputFormatter {
     const kindStr = this.kindLabel(kind, color);
     const metaSuffix = meta ? `  ${meta}` : "";
     return `${tsStr} ${labelPart}${kindStr} ${content}${metaSuffix}`;
+  }
+
+  private emit(
+    agentName: string | null,
+    kind: Kind,
+    terminalContent: string,
+    fileContent: string,
+    meta?: { terminal: string; file: string },
+  ): void {
+    const terminalLine = this.formatLine(
+      formatLocalTime(),
+      agentName,
+      kind,
+      terminalContent,
+      meta?.terminal || undefined,
+    );
+    const fileLine = this.formatLine(
+      timestamp(),
+      agentName,
+      kind,
+      fileContent,
+      meta?.file || undefined,
+      { color: false },
+    );
+    console.log(terminalLine);
+    this.writeLog(fileLine);
   }
 
   private writeLog(line: string): void {
