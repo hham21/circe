@@ -35,6 +35,7 @@ export {
   Parallel,
   Contract,
   Sprint,
+  map,
   type PipelineOptions,
   type LoopOptions,
   type ParallelOptions,

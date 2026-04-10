@@ -8,3 +8,4 @@ export { Contract } from "./contract.js";
 export type { ContractOptions } from "./contract.js";
 export { Sprint } from "./sprint.js";
 export type { SprintOptions } from "./sprint.js";
+export { map } from "./map.js";
