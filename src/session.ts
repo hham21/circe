@@ -1,7 +1,7 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { OutputFormatter } from "./cli/output.js";
+import { sessionStore } from "./store.js";
 import { SkillRegistry } from "./tools/skills.js";
 import { circeHome } from "./utils.js";
 
@@ -77,4 +77,4 @@ export class Session {
   }
 }
 
-export const sessionStore = new AsyncLocalStorage<Session>();
+export { sessionStore } from "./store.js";
