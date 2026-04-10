@@ -36,6 +36,7 @@ const DEFAULT_COST_PER_M_TOKENS = { input: 15, output: 75 };
 const BYPASS_PERMISSIONS_MODE = "bypassPermissions";
 const SKILL_SERVER_NAME = "circe-skills";
 const INPUT_PREVIEW_MAX_LENGTH = 80;
+const UNKNOWN_TOOL_NAME = "unknown";
 
 export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
   name: string;
@@ -217,14 +218,14 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
 
   private handleAssistantMessage(message: any, formatter: any): void {
     if (message.type !== "assistant") return;
-    if (!message.message?.content) return;
 
-    for (const block of message.message.content) {
-      if (block.type === "tool_use") {
-        this.pendingToolCalls.set(block.id, block.name ?? "unknown");
-        formatter?.logToolCall?.(this.name, block.name ?? "unknown", block.input ?? {});
+    for (const block of this.getContentBlocks(message)) {
+      if (block?.type === "tool_use") {
+        const toolName = block.name ?? UNKNOWN_TOOL_NAME;
+        this.pendingToolCalls.set(block.id, toolName);
+        formatter?.logToolCall?.(this.name, toolName, block.input ?? {});
       }
-      if (block.type === "thinking" && block.thinking) {
+      if (block?.type === "thinking" && block.thinking) {
         formatter?.logThinking?.(this.name, block.thinking);
       }
     }
@@ -232,21 +233,41 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
 
   private handleToolResult(message: any, formatter: any): void {
     if (message.type !== "user") return;
-    if (!formatter?.logToolResult || message.tool_use_result == null) return;
 
-    const toolName = message.parent_tool_use_id
-      ? (this.pendingToolCalls.get(message.parent_tool_use_id) ?? "unknown")
-      : "unknown";
+    for (const block of this.getContentBlocks(message)) {
+      if (block?.type !== "tool_result") continue;
 
-    const result = typeof message.tool_use_result === "string"
-      ? message.tool_use_result
-      : JSON.stringify(message.tool_use_result);
+      const toolUseId = block.tool_use_id;
+      const toolName = toolUseId
+        ? (this.pendingToolCalls.get(toolUseId) ?? UNKNOWN_TOOL_NAME)
+        : UNKNOWN_TOOL_NAME;
 
-    formatter.logToolResult(this.name, toolName, result);
+      if (toolUseId) {
+        this.pendingToolCalls.delete(toolUseId);
+      }
 
-    if (message.parent_tool_use_id) {
-      this.pendingToolCalls.delete(message.parent_tool_use_id);
+      if (formatter?.logToolResult) {
+        formatter.logToolResult(this.name, toolName, this.extractToolResultText(block.content));
+      }
     }
+  }
+
+  private getContentBlocks(message: any): any[] {
+    const content = message.message?.content;
+    return Array.isArray(content) ? content : [];
+  }
+
+  private extractToolResultText(content: unknown): string {
+    if (content == null) return "";
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      const parts: string[] = [];
+      for (const b of content) {
+        if (b?.type === "text") parts.push(b.text ?? "");
+      }
+      return parts.join("\n");
+    }
+    return JSON.stringify(content);
   }
 
   private extractResultMetrics(message: any): ResultMetrics {
