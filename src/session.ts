@@ -51,7 +51,7 @@ export class Session {
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
     this.startTime = Date.now();
-    this.shouldStop = false;
+    this.shouldStop = false; // reset so re-used sessions start clean
 
     return sessionStore.run(this, async () => {
       try {
@@ -64,7 +64,7 @@ export class Session {
   }
 
   get duration(): number {
-    if (this.startTime == null) return 0;
+    if (this.startTime === null) return 0;
     const end = this.endTime ?? Date.now();
     return (end - this.startTime) / 1000;
   }

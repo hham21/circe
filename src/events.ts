@@ -71,6 +71,10 @@ function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
   return null;
 }
 
+function buildCostLimitMessage(runningCost: number, maxCost: number): string {
+  return `Cost limit exceeded: $${runningCost.toFixed(2)} spent, limit is $${maxCost.toFixed(2)}`;
+}
+
 export interface EventBusOptions {
   maxCost?: number;
 }
@@ -81,8 +85,8 @@ export class EventBus {
   private maxCost: number | null;
   private runningCost = 0;
   private costByAgent: Record<string, number> = {};
-  private warned = false;
-  private softStopped = false;
+  private hasWarnedCostThreshold = false;
+  private hasSoftStopped = false;
 
   constructor(options?: EventBusOptions) {
     this.maxCost = options?.maxCost ?? null;
@@ -122,61 +126,71 @@ export class EventBus {
 
   private trackCost(event: OrchestratorEvent): void {
     const costEntry = extractCostEntry(event);
-    if (!costEntry) {
-      return;
-    }
+    if (!costEntry) return;
 
-    this.runningCost += costEntry.cost;
-    this.costByAgent[costEntry.agent] = (this.costByAgent[costEntry.agent] ?? 0) + costEntry.cost;
+    this.accumulateCost(costEntry);
 
     const maxCost = this.resolveMaxCost();
     const policy = this.resolveCostPolicy();
 
     if (policy && maxCost != null) {
-      // Graduated policy path (Session present)
-      const costPressure = this.runningCost / maxCost;
-
-      // Emit cost:pressure on every cost update
-      this.emitInternal({
-        type: "cost:pressure",
-        costPressure,
-        runningCost: this.runningCost,
-        timestamp: Date.now(),
-      });
-
-      // Check per-agent limits
-      this.checkAgentLimit(costEntry);
-
-      // Graduated thresholds: warn → softStop → hardStop
-      if (policy.warn != null && costPressure >= policy.warn && !this.warned) {
-        this.warned = true;
-        this.emitInternal({
-          type: "cost:warning",
-          costPressure,
-          runningCost: this.runningCost,
-          maxCost,
-          timestamp: Date.now(),
-        });
-      }
-
-      if (policy.softStop != null && costPressure >= policy.softStop && !this.softStopped) {
-        this.softStopped = true;
-        const session = sessionStore.getStore();
-        if (session) {
-          session.shouldStop = true;
-        }
-      }
-
-      if (policy.hardStop != null && costPressure >= policy.hardStop) {
-        throw new Error(
-          `Cost limit exceeded: $${this.runningCost.toFixed(2)} spent, limit is $${maxCost.toFixed(2)}`,
-        );
-      }
+      this.applyGraduatedPolicy(costEntry, policy, maxCost);
     } else if (maxCost != null && this.runningCost > maxCost) {
       // Fallback: no Session, use EventBusOptions.maxCost hard-stop (backward compat)
-      throw new Error(
-        `Cost limit exceeded: $${this.runningCost.toFixed(2)} spent, limit is $${maxCost.toFixed(2)}`,
-      );
+      throw new Error(buildCostLimitMessage(this.runningCost, maxCost));
+    }
+  }
+
+  private accumulateCost(entry: CostEntry): void {
+    this.runningCost += entry.cost;
+    this.costByAgent[entry.agent] = (this.costByAgent[entry.agent] ?? 0) + entry.cost;
+  }
+
+  private applyGraduatedPolicy(entry: CostEntry, policy: CostPolicy, maxCost: number): void {
+    const costPressure = this.runningCost / maxCost;
+
+    this.emitCostPressure(costPressure);
+    this.checkAgentLimit(entry);
+    this.checkWarnThreshold(policy, costPressure, maxCost);
+    this.checkSoftStopThreshold(policy, costPressure);
+    this.checkHardStopThreshold(policy, costPressure, maxCost);
+  }
+
+  private emitCostPressure(costPressure: number): void {
+    this.emitWithoutCostTracking({
+      type: "cost:pressure",
+      costPressure,
+      runningCost: this.runningCost,
+      timestamp: Date.now(),
+    });
+  }
+
+  private checkWarnThreshold(policy: CostPolicy, costPressure: number, maxCost: number): void {
+    if (policy.warn == null || costPressure < policy.warn || this.hasWarnedCostThreshold) return;
+
+    this.hasWarnedCostThreshold = true;
+    this.emitWithoutCostTracking({
+      type: "cost:warning",
+      costPressure,
+      runningCost: this.runningCost,
+      maxCost,
+      timestamp: Date.now(),
+    });
+  }
+
+  private checkSoftStopThreshold(policy: CostPolicy, costPressure: number): void {
+    if (policy.softStop == null || costPressure < policy.softStop || this.hasSoftStopped) return;
+
+    this.hasSoftStopped = true;
+    const session = sessionStore.getStore();
+    if (session) {
+      session.shouldStop = true;
+    }
+  }
+
+  private checkHardStopThreshold(policy: CostPolicy, costPressure: number, maxCost: number): void {
+    if (policy.hardStop != null && costPressure >= policy.hardStop) {
+      throw new Error(buildCostLimitMessage(this.runningCost, maxCost));
     }
   }
 
@@ -188,31 +202,29 @@ export class EventBus {
     if (limit == null) return;
 
     const agentCost = this.costByAgent[entry.agent] ?? 0;
-    if (agentCost > limit) {
-      this.emitInternal({
-        type: "cost:agent-limit",
-        agent: entry.agent,
-        agentCost,
-        limit,
-        timestamp: Date.now(),
-      });
-      throw new Error(
-        `Agent cost limit exceeded: agent "${entry.agent}" spent $${agentCost.toFixed(2)}, limit is $${limit.toFixed(2)}`,
-      );
-    }
+    if (agentCost <= limit) return;
+
+    this.emitWithoutCostTracking({
+      type: "cost:agent-limit",
+      agent: entry.agent,
+      agentCost,
+      limit,
+      timestamp: Date.now(),
+    });
+    throw new Error(
+      `Agent cost limit exceeded: agent "${entry.agent}" spent $${agentCost.toFixed(2)}, limit is $${limit.toFixed(2)}`,
+    );
   }
 
   /** Emit an event without re-entering trackCost (avoids infinite recursion for cost events). */
-  private emitInternal(event: OrchestratorEvent): void {
+  private emitWithoutCostTracking(event: OrchestratorEvent): void {
     this.history.push(event);
     this.dispatchToHandlers(event);
   }
 
   private dispatchToHandlers(event: OrchestratorEvent): void {
     const handlers = this.handlersByType.get(event.type);
-    if (!handlers) {
-      return;
-    }
+    if (!handlers) return;
 
     for (const handler of handlers) {
       try {
