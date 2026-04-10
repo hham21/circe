@@ -99,6 +99,7 @@ export class Contract<TIn = unknown, TProposal = unknown, TReview = unknown> imp
         round,
         result: review,
         cost: roundCost || undefined,
+        costByAgent: this.eventBus ? { ...this.eventBus.getCostSummary().perAgent } : undefined,
         timestamp: Date.now(),
       });
 

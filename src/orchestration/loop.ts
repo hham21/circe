@@ -92,7 +92,14 @@ export class Loop<TIn = unknown, TProducer = unknown, TEval = unknown> implement
         this.captureRoundOutputs(i, result);
       }
 
-      this.eventBus?.emit({ type: "round:done", round, result, cost: roundCost || undefined, timestamp: Date.now() });
+      this.eventBus?.emit({
+        type: "round:done",
+        round,
+        result,
+        cost: roundCost || undefined,
+        costByAgent: this.eventBus ? { ...this.eventBus.getCostSummary().perAgent } : undefined,
+        timestamp: Date.now(),
+      });
       return result;
     } catch (err) {
       this.eventBus?.emit({ type: "round:error", round, error: errorMessage(err), timestamp: Date.now() });
