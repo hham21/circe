@@ -243,6 +243,10 @@ export class Agent<TIn = string, TOut = string> implements Runnable<TIn, TOut> {
       : JSON.stringify(message.tool_use_result);
 
     formatter.logToolResult(this.name, toolName, result);
+
+    if (message.parent_tool_use_id) {
+      this.pendingToolCalls.delete(message.parent_tool_use_id);
+    }
   }
 
   private extractResultMetrics(message: any): ResultMetrics {

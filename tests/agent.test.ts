@@ -501,4 +501,37 @@ describe("Agent enhanced logging", () => {
 
     expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "unknown", "some result");
   });
+
+  it("handleToolResult uses 'unknown' when parent_tool_use_id is absent", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        tool_use_result: "some result",
+      },
+      mockFormatter,
+    );
+
+    expect(mockFormatter.logToolResult).toHaveBeenCalledWith("test", "unknown", "some result");
+  });
+
+  it("handleToolResult deletes pendingToolCalls entry after consumption", () => {
+    const a = new Agent({ name: "test", prompt: "" });
+    (a as any).pendingToolCalls.set("tu1", "Bash");
+
+    const mockFormatter = { logToolResult: vi.fn() };
+
+    (a as any).handleToolResult(
+      {
+        type: "user",
+        parent_tool_use_id: "tu1",
+        tool_use_result: "done",
+      },
+      mockFormatter,
+    );
+
+    expect((a as any).pendingToolCalls.has("tu1")).toBe(false);
+  });
 });
