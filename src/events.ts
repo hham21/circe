@@ -50,20 +50,14 @@ interface CostEntry {
 }
 
 function extractCostEntry(event: OrchestratorEvent): CostEntry | null {
+  // Only count leaf-level cost events that represent actual LLM calls.
+  // Skip step:done, round:done, sprint:done — these are orchestrator wrappers
+  // that report the same cost already counted at the agent level.
   if (event.type === "agent:done") {
     return { cost: event.cost, agent: event.agent };
   }
   if (event.type === "agent:error" && event.cost != null) {
     return { cost: event.cost, agent: event.agent };
-  }
-  if (event.type === "step:done" && event.cost != null) {
-    return { cost: event.cost, agent: event.agent };
-  }
-  if (event.type === "round:done" && event.cost != null) {
-    return { cost: event.cost, agent: `round-${event.round}` };
-  }
-  if (event.type === "sprint:done" && event.cost != null) {
-    return { cost: event.cost, agent: `sprint-${event.index}` };
   }
   if (event.type === "branch:done" && event.cost != null) {
     return { cost: event.cost, agent: event.branch };
