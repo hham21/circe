@@ -1,5 +1,6 @@
 import { sessionStore } from "./store.js";
 import type { CostPolicy, Session } from "./session.js";
+import type { Runnable } from "./types.js";
 
 export type OrchestratorEvent =
   | { type: "agent:start"; agent: string; timestamp: number }
@@ -270,30 +271,69 @@ export function errorMessage(err: unknown): string {
 /**
  * Run an agent with optional retry and EventBus retry event emission.
  * Shared by all orchestrators to eliminate duplicated retry wrappers.
+ *
+ * Emits a leaf-level `agent:done` event after successful execution when the
+ * runnable is a leaf (no nested `agent:done` events appeared during its run).
+ * This is the cost-counted event — orchestrator wrappers like step:done and
+ * round:done are intentionally skipped by extractCostEntry to avoid
+ * double-counting in nested compositions.
  */
 export async function runWithOptionalRetry<TIn, TOut>(
-  agent: { name?: string; run(input: TIn): Promise<TOut> },
+  runnable: Runnable<TIn, TOut>,
   input: TIn,
   retryPolicy: RetryPolicy | null,
   eventBus: EventBus | null,
 ): Promise<TOut> {
-  if (!retryPolicy) {
-    return agent.run(input);
-  }
+  const historyLenBefore = eventBus?.history.length ?? 0;
 
-  return executeWithRetry(
-    () => agent.run(input),
-    retryPolicy,
-    (attempt) => {
-      eventBus?.emit({
-        type: "retry",
-        agent: agent.name ?? "unknown",
-        attempt,
-        maxAttempts: retryPolicy.maxRetries,
-        timestamp: Date.now(),
-      });
-    },
-  );
+  const result = retryPolicy
+    ? await executeWithRetry(
+        () => runnable.run(input),
+        retryPolicy,
+        (attempt) => {
+          eventBus?.emit({
+            type: "retry",
+            agent: runnable.name ?? "unknown",
+            attempt,
+            maxAttempts: retryPolicy.maxRetries,
+            timestamp: Date.now(),
+          });
+        },
+      )
+    : await runnable.run(input);
+
+  emitLeafAgentDone(runnable, result, eventBus, historyLenBefore);
+
+  return result;
+}
+
+/**
+ * Emit `agent:done` if this runnable is a leaf (no nested `agent:done` events
+ * appeared in history during its execution). Composite runnables like Pipeline
+ * and Loop are detected by the presence of nested `agent:done` events emitted
+ * by their own inner `runWithOptionalRetry` calls.
+ */
+function emitLeafAgentDone<TIn, TOut>(
+  runnable: Runnable<TIn, TOut>,
+  result: TOut,
+  eventBus: EventBus | null,
+  historyLenBefore: number,
+): void {
+  if (!eventBus || !runnable.lastMetrics) return;
+
+  const hadNestedAgentDone = eventBus.history
+    .slice(historyLenBefore)
+    .some((e) => e.type === "agent:done");
+  if (hadNestedAgentDone) return;
+
+  eventBus.emit({
+    type: "agent:done",
+    agent: runnable.name ?? "unknown",
+    result,
+    cost: runnable.lastMetrics.cost,
+    tokens: [runnable.lastMetrics.inputTokens, runnable.lastMetrics.outputTokens],
+    timestamp: Date.now(),
+  });
 }
 
 export async function executeWithRetry<T>(
