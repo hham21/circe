@@ -234,6 +234,28 @@ describe("Session cost policy", () => {
   });
 });
 
+describe("Session logLevel", () => {
+  it("passes logLevel to formatter", () => {
+    const session = new Session({ outputDir: tempDir, logLevel: "trace" });
+    expect(session.formatter.logLevel).toBe("trace");
+  });
+
+  it("maps verbose: true to debug logLevel", () => {
+    const session = new Session({ outputDir: tempDir, verbose: true });
+    expect(session.formatter.logLevel).toBe("debug");
+  });
+
+  it("logLevel takes precedence over verbose", () => {
+    const session = new Session({ outputDir: tempDir, verbose: true, logLevel: "info" });
+    expect(session.formatter.logLevel).toBe("info");
+  });
+
+  it("defaults to no logLevel when neither set", () => {
+    const session = new Session({ outputDir: tempDir });
+    expect(session.formatter.logLevel).toBeUndefined();
+  });
+});
+
 describe("context.ts fallback", () => {
   it("getWorkDir falls back to global when no session", () => {
     setWorkDir("/global/path");
