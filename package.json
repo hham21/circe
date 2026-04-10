@@ -1,6 +1,6 @@
 {
   "name": "@hham21/circe",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "Composable multi-agent orchestration framework built on the Claude Agent SDK",
   "type": "module",
   "main": "dist/index.js",

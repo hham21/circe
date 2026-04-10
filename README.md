@@ -45,7 +45,7 @@ const evaluator = new Agent({
 
 const loop = new Loop(generator, evaluator, { maxRounds: 3 });
 
-await new Session({ outputDir: "./output", verbose: true })
+await new Session({ outputDir: "./output", logLevel: "debug" })
   .run(() => loop.run("Build a retro game maker"));
 ```
 
@@ -140,13 +140,20 @@ Loop and Contract return **producer output on success** (the content, not the ev
 Compose freely:
 
 ```typescript
-import { pipe } from "@hham21/circe";
+import { pipe, map } from "@hham21/circe";
 
 // Type-safe pipeline — compiler checks that output types chain correctly
 pipe(planner, new Loop(generator, evaluator, { maxRounds: 3 }));
 
 // With negotiation
 pipe(planner, new Contract(proposer, reviewer), new Loop(generator, evaluator));
+
+// map() wraps a pure function as a Runnable for inline transforms between steps
+pipe(
+  planner,
+  map((spec) => ({ ...spec, features: spec.features.slice(0, 3) })),
+  new Loop(generator, evaluator, { maxRounds: 3 }),
+);
 ```
 
 ### Events & Observability
@@ -171,7 +178,11 @@ await loop.run(input);
 console.log(bus.getCostSummary()); // { total: 1.23, perAgent: { generator: 0.8, evaluator: 0.43 } }
 ```
 
-Event types: `agent:start/done/error`, `step:start/done/error` (Pipeline), `round:start/done/error` (Loop/Contract), `branch:start/done/error` (Parallel), `sprint:start/done/error` (Sprint), `retry`, `pipeline:done`.
+Event types: `agent:start/done/error`, `step:start/done/error` (Pipeline), `round:start/done/error` (Loop/Contract), `branch:start/done/error` (Parallel), `sprint:start/done/error` (Sprint), `retry`, `pipeline:done`, `cost:pressure`, `cost:warning`.
+
+#### Graduated Cost Control
+
+Beyond the hard `maxCost` limit, Circe emits a **costPressure signal** (0.0–1.0 fraction of budget consumed) on every cost tick. Orchestrators check `session.shouldStop` between steps so workflows can exit cleanly when the budget tightens instead of crashing mid-round. Configure thresholds via `Session.costPolicy` (see [Session](#session) below). `round:done` events also carry `costByAgent` for per-agent attribution.
 
 ### Retry
 
@@ -194,7 +205,17 @@ Session eliminates boilerplate. It auto-creates the output directory, sets up lo
 ```typescript
 import { Session } from "@hham21/circe";
 
-const session = new Session({ outputDir: "./output/my-app", verbose: true });
+const session = new Session({
+  outputDir: "./output/my-app",
+  logLevel: "debug", // "silent" | "info" | "debug" | "trace"
+  maxCost: 5.0,      // hard budget in USD (throws at 100%)
+  costPolicy: {      // graduated pressure thresholds (fractions of maxCost)
+    warn: 0.7,       // emits cost:warning event at 70%
+    softStop: 0.9,   // sets session.shouldStop at 90% (orchestrators exit cleanly)
+    hardStop: 1.0,   // throws Error at 100%
+  },
+  agentCostLimits: { generator: 2.0, evaluator: 1.0 }, // per-agent USD caps
+});
 await session.run(() => pipeline.run("Build a todo app"));
 
 console.log(`Duration: ${session.duration.toFixed(1)}s`);
